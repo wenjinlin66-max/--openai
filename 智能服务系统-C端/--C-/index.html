@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <!-- ✅ 核心修复：Content-Security-Policy (CSP) -->
+    <!-- 关键点在最后的 connect-src *; 这代表允许向任何地址发送网络请求，彻底解决 API 拦截问题 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob:; script-src 'self' 'unsafe-eval' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: blob:; connect-src *;">
+    
+    <title>Prestige Club</title>
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+      /* 保持原有的滚动条样式 */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
+      }
+      .custom-scrollbar:hover {
+        scrollbar-color: #cbd5e1 transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        height: 4px; /* Height for horizontal scrollbar */
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: transparent;
+        border-radius: 20px;
+      }
+      .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+        background-color: #cbd5e1; /* gray-300 */
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 text-slate-900 antialiased select-none">
+    <div id="root"></div>
+    
+    <!-- ✅ 确保入口文件路径正确 -->
+    <!-- 根据你之前的截图，index.tsx 在根目录下，所以路径是 /index.tsx -->
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

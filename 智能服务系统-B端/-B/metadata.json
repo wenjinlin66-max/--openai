@@ -1,0 +1,8 @@
+{
+  "name": "CRIMS - 智能服务管理",
+  "description": "智能客户关系管理系统，具备AI面部识别分析、服务推荐及情感反馈分析功能。",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

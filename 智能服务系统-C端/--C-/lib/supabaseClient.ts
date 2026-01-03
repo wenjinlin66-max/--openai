@@ -1,7 +1,14 @@
-import { createClient } from '@supabase/supabase-js';
+// 使用 import.meta.env 获取环境变量，这是 Vite 的标准做法
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// 这里的 Key 和 URL 与 B 端项目完全一致，确保数据互通
-const SUPABASE_URL = 'https://vhgwvdurnkecxvuvcrpz.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZoZ3d2ZHVybmtlY3h2dXZjcnB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2NTgyOTQsImV4cCI6MjA3OTIzNDI5NH0.agAQym2eYwINVHQTVak_AzM4iF8t1u9aas1VaYpJfDM';
+// 打印一下，确保地址是以 "vhgw..." 开头的，而不是 "kbkoc..."
+console.log("当前使用的 Supabase 地址:", SUPABASE_URL);
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error("错误：Supabase 环境变量缺失，请检查 .env 文件并重启项目！");
+}
+
+import { createClient } from '@supabase/supabase-js';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);

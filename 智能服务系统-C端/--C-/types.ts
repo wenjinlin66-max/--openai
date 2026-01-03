@@ -31,6 +31,8 @@ export interface Feedback {
   text: string;
   sentiment?: 'positive' | 'neutral' | 'negative';
   created_at?: string;
+  appointment_id?: string;
+  rating?: number;
 }
 
 export interface Transaction {
@@ -78,6 +80,8 @@ export interface Campaign {
   status: 'active' | 'draft' | 'archived';
   image_url?: string;
   created_at: string;
+  target_audience?: string[];
+  clicks?: number;
 }
 
 export type TabType = 'home' | 'recharge' | 'feedback' | 'history' | 'notifications' | 'appointment' | 'chat';

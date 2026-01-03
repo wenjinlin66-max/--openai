@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, ThumbsUp, ThumbsDown, Minus, Sparkles, PieChart, RefreshCcw } from 'lucide-react';
+import { MessageSquare, ThumbsUp, ThumbsDown, Minus, Sparkles, PieChart, RefreshCcw, Star } from 'lucide-react';
 import { fetchFeedbacks } from '../services/dataService';
 import { FeedbackItem } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
@@ -24,17 +24,9 @@ const FeedbackView: React.FC = () => {
     if (isSupabaseConfigured()) {
       const channel = supabase.channel('public:feedbacks')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'feedbacks' }, (payload) => {
-          const newFeedback = payload.new as any;
-          const mappedItem: FeedbackItem = {
-            id: newFeedback.id,
-            customerName: newFeedback.customer_name || '匿名',
-            date: newFeedback.created_at.split('T')[0],
-            text: newFeedback.text,
-            sentiment: newFeedback.sentiment,
-            aiSummary: newFeedback.ai_summary
-          };
-          setFeedbacks(prev => [mappedItem, ...prev]);
-          setIsRealtime(true);
+          // 注意：Realtime 推送的 payload 通常不包含 joined table 的数据
+          // 简单起见，这里直接触发重新获取
+          loadFeedbacks();
         })
         .subscribe();
 
@@ -58,6 +50,20 @@ const FeedbackView: React.FC = () => {
       case 'negative': return 'bg-red-50 border-red-100';
       default: return 'bg-slate-50 border-slate-100';
     }
+  };
+
+  const renderStars = (rating?: number) => {
+    if (!rating) return null;
+    return (
+      <div className="flex gap-0.5">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Star 
+            key={star} 
+            className={`w-3.5 h-3.5 ${star <= rating ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} 
+          />
+        ))}
+      </div>
+    );
   };
 
   // 计算统计数据
@@ -131,8 +137,21 @@ const FeedbackView: React.FC = () => {
                                 {getSentimentIcon(item.sentiment)}
                             </div>
                             <div>
-                                <h4 className="font-bold text-slate-800 text-sm">{item.customerName}</h4>
-                                <span className="text-xs text-slate-500">{item.date}</span>
+                                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                  {item.customerName}
+                                  {renderStars(item.rating)}
+                                </h4>
+                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                   <span>{item.date}</span>
+                                   {item.serviceName && (
+                                     <>
+                                      <span>•</span>
+                                      <span className="font-medium bg-white/60 px-1.5 rounded text-indigo-900/70 border border-indigo-100/50">
+                                        项目: {item.serviceName}
+                                      </span>
+                                     </>
+                                   )}
+                                </div>
                             </div>
                         </div>
                         <span className="text-xs font-medium px-2 py-1 bg-white rounded border border-slate-100 shadow-sm">

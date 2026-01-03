@@ -62,6 +62,8 @@ export interface FeedbackItem {
   text: string;
   sentiment: 'positive' | 'neutral' | 'negative';
   aiSummary: string;
+  rating?: number;      // 新增：评分星级 (1-5)
+  serviceName?: string; // 新增：关联的服务名称
 }
 
 export interface NotificationItem {
@@ -83,6 +85,12 @@ export interface Appointment {
   notes?: string;
 }
 
+// 新增：时间段容量配置接口
+export interface SlotConfig {
+  time_slot: string;
+  capacity: number;
+}
+
 export interface ChatMessage {
   id: string;
   customerId: string;
@@ -100,6 +108,8 @@ export interface Campaign {
   startDate: string;
   endDate: string;
   createdAt: string;
+  targetAudience: string[]; // 新增：受众群体，例如 ['all'] 或 ['黄金会员', '铂金会员']
+  clicks: number;           // 新增：点击量
 }
 
 export type ViewState = 'dashboard' | 'scanner' | 'customers' | 'assistant' | 'feedback' | 'appointments' | 'chat' | 'marketing';

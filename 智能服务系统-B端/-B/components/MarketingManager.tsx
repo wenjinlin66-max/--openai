@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Plus, Calendar, Tag, Trash2, PlayCircle, StopCircle, Loader2, RefreshCw, Smartphone, Eye, LayoutTemplate, MessageSquare, Clock, AlertTriangle, X } from 'lucide-react';
+import { Sparkles, Plus, Calendar, Tag, Trash2, PlayCircle, StopCircle, Loader2, RefreshCw, LayoutTemplate, MessageSquare, Clock, AlertTriangle, X, Users, MousePointer2 } from 'lucide-react';
 import { fetchCampaigns, createCampaign, updateCampaignStatus, deleteCampaign } from '../services/dataService';
-import { Campaign } from '../types';
+import { Campaign, CustomerTier } from '../types';
 import { supabase } from '../lib/supabaseClient';
 
 const MarketingManager: React.FC = () => {
@@ -31,7 +31,8 @@ const MarketingManager: React.FC = () => {
     description: '',
     type: 'promotion',
     startDate: getTodayString(),
-    endDate: getFutureDateString(7)
+    endDate: getFutureDateString(7),
+    targetAudience: ['all'] as string[]
   });
 
   const loadCampaigns = async () => {
@@ -55,6 +56,32 @@ const MarketingManager: React.FC = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  const toggleAudience = (tier: string) => {
+    let newAudience = [...form.targetAudience];
+    
+    if (tier === 'all') {
+      newAudience = ['all'];
+    } else {
+      // Remove 'all' if selecting specific tier
+      if (newAudience.includes('all')) {
+        newAudience = newAudience.filter(t => t !== 'all');
+      }
+      
+      if (newAudience.includes(tier)) {
+        newAudience = newAudience.filter(t => t !== tier);
+      } else {
+        newAudience.push(tier);
+      }
+
+      // If nothing selected, default to all? or enforce logic. Let's make it easy: empty = all.
+      // Or safer: if empty after toggle, set to all.
+      if (newAudience.length === 0) {
+        newAudience = ['all'];
+      }
+    }
+    setForm({ ...form, targetAudience: newAudience });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +109,8 @@ const MarketingManager: React.FC = () => {
         description: '',
         type: 'promotion',
         startDate: getTodayString(),
-        endDate: getFutureDateString(7)
+        endDate: getFutureDateString(7),
+        targetAudience: ['all']
       });
       loadCampaigns();
     } else {
@@ -135,6 +163,11 @@ const MarketingManager: React.FC = () => {
     if (form.type === 'announcement') return "例如：系统将于今晚进行维护，请提前安排。注意：此内容将以【全屏弹窗】形式展示给用户。";
     if (form.type === 'promotion') return "例如：双11限时特惠，充值1000送200！";
     return "请输入活动具体内容...";
+  };
+
+  const getAudienceLabel = (audience: string[]) => {
+    if (!audience || audience.includes('all')) return '全部客户';
+    return audience.join(', ');
   };
 
   return (
@@ -227,6 +260,17 @@ const MarketingManager: React.FC = () => {
                                 {daysLeft > 0 ? `剩余 ${daysLeft} 天` : '即将结束'}
                               </div>
                             )}
+                            
+                            <div className="mt-3 flex items-center gap-2 flex-wrap">
+                               <div className="flex items-center gap-1 text-[10px] text-slate-500 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                                 <Users className="w-3 h-3 text-indigo-500" />
+                                 <span className="truncate max-w-[100px]">{getAudienceLabel(campaign.targetAudience)}</span>
+                               </div>
+                               <div className="flex items-center gap-1 text-[10px] text-slate-500 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                                 <MousePointer2 className="w-3 h-3 text-indigo-500" />
+                                 <span>{campaign.clicks} 点击</span>
+                               </div>
+                            </div>
                         </div>
                         
                         <div className="p-4 bg-slate-50/50 rounded-b-2xl">
@@ -325,6 +369,20 @@ const MarketingManager: React.FC = () => {
                      </div>
 
                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">受众群体 (精准推送)</label>
+                        <div className="flex flex-wrap gap-2">
+                           <button type="button" onClick={() => toggleAudience('all')} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${form.targetAudience.includes('all') ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                             全部客户
+                           </button>
+                           {Object.values(CustomerTier).map(tier => (
+                              <button key={tier} type="button" onClick={() => toggleAudience(tier)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${form.targetAudience.includes(tier) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                                {tier}
+                              </button>
+                           ))}
+                        </div>
+                     </div>
+
+                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">活动标题</label>
                         <input required type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-slate-900" placeholder="例如：夏季狂欢节" />
                      </div>
@@ -336,11 +394,11 @@ const MarketingManager: React.FC = () => {
 
                      <div className="grid grid-cols-2 gap-5">
                         <div>
-                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">开始日期</label>
+                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">开始日期 (上线)</label>
                            <input required type="date" value={form.startDate} onChange={e => setForm({...form, startDate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none text-slate-900" />
                         </div>
                         <div>
-                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">结束日期</label>
+                           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">结束日期 (下线)</label>
                            <input required type="date" value={form.endDate} onChange={e => setForm({...form, endDate: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none text-slate-900" />
                         </div>
                      </div>
@@ -349,7 +407,7 @@ const MarketingManager: React.FC = () => {
                         <button type="submit" disabled={isSubmitting} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-transform active:scale-[0.98]">
                            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : '确认发布活动'}
                         </button>
-                        <p className="text-[10px] text-slate-400 text-center mt-2">活动将在开始日期的 00:00 生效，于结束日期的 23:59 截止。</p>
+                        <p className="text-[10px] text-slate-400 text-center mt-2">活动将在开始日期的 00:00 生效，于结束日期的 23:59 自动下线。</p>
                      </div>
                   </form>
               </div>
@@ -373,6 +431,14 @@ const MarketingManager: React.FC = () => {
                             <div className="font-bold text-sm">CRIMS</div>
                             <div className="w-6 h-6 bg-slate-100 rounded-full"></div>
                          </div>
+                         
+                         {/* Audience Tag for Preview */}
+                         <div className="px-4 pt-2 pb-0">
+                           <span className="inline-block px-2 py-0.5 bg-slate-800 text-white text-[9px] rounded-md font-bold opacity-80">
+                             预览模式: {form.targetAudience.includes('all') ? '所有用户可见' : `仅 ${form.targetAudience.length} 类会员可见`}
+                           </span>
+                         </div>
+
                          <div className="p-4 space-y-3 opacity-50 pointer-events-none">
                             <div className="h-32 bg-slate-200 rounded-xl w-full"></div>
                             <div className="flex gap-2">

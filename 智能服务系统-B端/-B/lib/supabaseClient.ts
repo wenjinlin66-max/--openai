@@ -1,12 +1,17 @@
+// 使用 import.meta.env 获取环境变量，这是 Vite 的标准做法
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// 打印一下，确保地址是以 "vhgw..." 开头的，而不是 "kbkoc..."
+console.log("当前使用的 Supabase 地址:", SUPABASE_URL);
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error("错误：Supabase 环境变量缺失，请检查 .env 文件并重启项目！");
+}
+
 import { createClient } from '@supabase/supabase-js';
 
-// Supabase Configuration
-// Using process.env instead of import.meta.env to avoid TS errors
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://kbkocmjvthhfnfwdxrwi.supabase.co";
-const SUPABASE_ANON_KEY = process.env.SUPABASE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtia29jbWp2dGhoZm5md2R4cndpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM4MjE2OTMsImV4cCI6MjA3OTM5NzY5M30.0HT1qqIhaL2PRQPdiF_D8sxFJsREiuHjFaUojHxtvS4";
-
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 // Helper to check if Supabase is configured
 export const isSupabaseConfigured = () => {
   return !!SUPABASE_URL && !!SUPABASE_ANON_KEY && 

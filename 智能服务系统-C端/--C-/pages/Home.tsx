@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { QrCode, Wallet, Gem, TrendingUp, ChevronRight, Bell, MessageCircleQuestion, LogOut, X, Megaphone, CalendarHeart, MapPin } from 'lucide-react';
 import { Customer, TabType, Campaign } from '../types';
@@ -54,6 +53,21 @@ const HomePage: React.FC<HomePageProps> = ({ user, onNavigate, unreadCount, onLo
   const [events, setEvents] = useState<Campaign[]>([]);
   const [currentPromoIndex, setCurrentPromoIndex] = useState(0);
 
+  // Helper for tracking clicks
+  const trackCampaignClick = async (id: string) => {
+    try {
+        // Try RPC first (best practice)
+        const { error } = await supabase.rpc('increment_campaign_clicks', { campaign_id: id });
+        if (error) throw error;
+    } catch (err) {
+        // Fallback: Direct Update
+        const { data } = await supabase.from('campaigns').select('clicks').eq('id', id).single();
+        if (data) {
+            await supabase.from('campaigns').update({ clicks: (data.clicks || 0) + 1 }).eq('id', id);
+        }
+    }
+  };
+
   // 1. Fetch Campaigns (Promotions & Events only)
   useEffect(() => {
     const fetchCampaigns = async () => {
@@ -74,11 +88,17 @@ const HomePage: React.FC<HomePageProps> = ({ user, onNavigate, unreadCount, onLo
       }
 
       if (data) {
+        // Filter by Target Audience (Tier)
+        const filteredData = data.filter(c => {
+           const audience = c.target_audience || ['all'];
+           return audience.includes('all') || audience.includes(String(user.tier));
+        });
+
         // Filter Promotions (Banner)
-        setPromotions(data.filter(c => c.type === 'promotion'));
+        setPromotions(filteredData.filter(c => c.type === 'promotion'));
 
         // Filter Events (List)
-        setEvents(data.filter(c => c.type === 'event'));
+        setEvents(filteredData.filter(c => c.type === 'event'));
       }
     };
 
@@ -95,7 +115,7 @@ const HomePage: React.FC<HomePageProps> = ({ user, onNavigate, unreadCount, onLo
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user.id]);
+  }, [user.id, user.tier]);
 
   // 2. Auto-rotate Promotions
   useEffect(() => {
@@ -195,10 +215,11 @@ const HomePage: React.FC<HomePageProps> = ({ user, onNavigate, unreadCount, onLo
 
         {/* Promotions Banner Swiper (Type: Promotion) */}
         {promotions.length > 0 && (
-          <div className="rounded-xl overflow-hidden shadow-md relative group h-40">
+          <div className="rounded-xl overflow-hidden shadow-md relative group h-40 cursor-pointer">
             {promotions.map((promo, idx) => (
               <div 
                 key={promo.id} 
+                onClick={() => trackCampaignClick(promo.id)}
                 className={`absolute inset-0 transition-opacity duration-700 ease-in-out flex ${idx === currentPromoIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}
               >
                 {/* Background: Image or Gradient Fallback */}
@@ -227,7 +248,7 @@ const HomePage: React.FC<HomePageProps> = ({ user, onNavigate, unreadCount, onLo
             
             {/* Indicators */}
             {promotions.length > 1 && (
-              <div className="absolute bottom-3 right-3 z-20 flex space-x-1.5">
+              <div className="absolute bottom-3 right-3 z-20 flex space-x-1.5 pointer-events-none">
                 {promotions.map((_, idx) => (
                   <div 
                     key={idx} 

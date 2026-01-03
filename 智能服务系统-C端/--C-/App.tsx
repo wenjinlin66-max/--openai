@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Bell, X, Megaphone } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
@@ -28,6 +27,7 @@ export default function App() {
   // Announcement State
   const [announcement, setAnnouncement] = useState<Campaign | null>(null);
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [hasCheckedAnnouncement, setHasCheckedAnnouncement] = useState(false);
 
   const triggerRefresh = useCallback(() => setRefreshTrigger(prev => prev + 1), []);
 
@@ -138,9 +138,21 @@ export default function App() {
     setUnreadCount(count || 0);
   }, [session]);
 
-  // Fetch Announcement (Global)
+  // Reset announcement check when tab changes
   useEffect(() => {
-    if (!session) return;
+    setHasCheckedAnnouncement(false);
+  }, [activeTab]);
+
+  // Fetch Announcement (Global) with Tier Filtering
+  useEffect(() => {
+    // We need 'user' to be loaded to check the tier
+    if (!session || !user) return;
+    
+    // Only fetch announcement if on Home tab
+    if (activeTab !== 'home') return;
+
+    // Prevent repeated checks/popups during the same home visit
+    if (hasCheckedAnnouncement) return;
 
     const fetchAnnouncement = async () => {
       const now = new Date().toISOString();
@@ -154,35 +166,41 @@ export default function App() {
           .eq('status', 'active')
           .lte('start_date', now)
           .gte('end_date', now)
-          .order('created_at', { ascending: false })
-          .limit(1);
+          .order('created_at', { ascending: false });
 
         if (error) throw error;
 
         if (data && data.length > 0) {
-          setAnnouncement(data[0]);
-          // DEBUG MODE: Always show
-          setShowAnnouncementModal(true);
+          // Client-side filtering for target audience
+          // Logic: Show if 'all' is in target_audience OR current user tier is in target_audience
+          const validAnnouncement = data.find((c: Campaign) => {
+            const audience = c.target_audience || ['all']; // Default to all if undefined
+            return audience.includes('all') || audience.includes(String(user.tier));
+          });
+
+          if (validAnnouncement) {
+            setAnnouncement(validAnnouncement);
+            setShowAnnouncementModal(true);
+          }
         }
       } catch (err) {
         console.error("Error fetching announcement:", err);
+      } finally {
+        // Mark as checked regardless of result to avoid continuous fetching on this view
+        setHasCheckedAnnouncement(true);
       }
     };
 
     fetchAnnouncement();
 
     // Realtime listener for campaigns (Announcements)
-    // This ensures if admin activates a new announcement, it pops up immediately.
     const channel = supabase
       .channel('global-announcements')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'campaigns' }, 
         (payload) => {
-            const newCampaign = payload.new as Campaign;
-            if (newCampaign && newCampaign.type === 'announcement') {
-                fetchAnnouncement();
-            }
+             fetchAnnouncement();
         }
       )
       .subscribe();
@@ -190,7 +208,7 @@ export default function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [session, refreshTrigger]); 
+  }, [session, user, refreshTrigger, activeTab, hasCheckedAnnouncement]); 
 
   useEffect(() => {
     if (session) {
@@ -232,6 +250,29 @@ export default function App() {
     setUser(null);
     setSession(null);
     setLoading(false);
+  };
+
+  const handleCloseAnnouncement = () => {
+    setShowAnnouncementModal(false);
+  };
+
+  const handleAnnouncementClick = async () => {
+    if (!announcement) return;
+    
+    setShowAnnouncementModal(false);
+
+    // Track Click
+    try {
+        // Try RPC first
+        const { error } = await supabase.rpc('increment_campaign_clicks', { campaign_id: announcement.id });
+        if (error) throw error;
+    } catch (err) {
+        // Fallback: Direct Update (Less safe for concurrency but functional for demo)
+        const { data } = await supabase.from('campaigns').select('clicks').eq('id', announcement.id).single();
+        if (data) {
+            await supabase.from('campaigns').update({ clicks: (data.clicks || 0) + 1 }).eq('id', announcement.id);
+        }
+    }
   };
 
   if (loading) {
@@ -298,7 +339,7 @@ export default function App() {
           <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 relative">
             {/* Close Button */}
             <button 
-              onClick={() => setShowAnnouncementModal(false)}
+              onClick={handleCloseAnnouncement}
               className="absolute top-3 right-3 p-2 bg-black/10 hover:bg-black/20 rounded-full transition-colors z-10"
             >
               <X size={18} className="text-slate-800" />
@@ -315,7 +356,7 @@ export default function App() {
                 {announcement.description}
               </div>
               <button 
-                onClick={() => setShowAnnouncementModal(false)}
+                onClick={handleAnnouncementClick}
                 className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold shadow-lg hover:bg-slate-800 transition-transform active:scale-95"
               >
                 知道了

@@ -1,52 +1,59 @@
-import OpenAI from "openai";
-
-// 1. 初始化客户端 (使用中转配置)
-const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-const baseURL = import.meta.env.VITE_OPENAI_BASE_URL;
-
-const client = new OpenAI({
-  apiKey: apiKey,
-  baseURL: baseURL,
-  dangerouslyAllowBrowser: true // 允许前端直接调用
-});
-
-// 2. 模型选择 (建议用最新的 Flash)
-const MODEL_ID = 'gemini-2.5-flash';
-
 export interface SentimentResult {
   sentiment: 'positive' | 'neutral' | 'negative';
   confidence: number;
+}
+
+// 1. 获取 Supabase 配置
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/gemini-proxy`;
+
+/**
+ * 通用后端函数调用工具
+ */
+async function callAiBackend(messages: any[]) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error("C端环境变量缺失，请检查 .env");
+  }
+
+  const response = await fetch(FUNCTION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+    },
+    body: JSON.stringify({
+      model: "gemini-2.5-flash",
+      messages: messages
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error || "请求失败");
+  }
+
+  const result = await response.json();
+  return result.choices[0].message.content;
 }
 
 // ==========================================
 // 1. 情感分析 (JSON 模式)
 // ==========================================
 export const analyzeSentiment = async (text: string): Promise<SentimentResult> => {
-  if (!apiKey) {
-    console.warn("API Key 缺失，跳过 AI 分析。");
-    return { sentiment: 'neutral', confidence: 0 };
-  }
-
   try {
     const prompt = `Analyze the sentiment of the following customer feedback. 
     Return a JSON object with "sentiment" (positive, neutral, negative) and "confidence" (0-1).
     Feedback text: "${text}"`;
 
-    const response = await client.chat.completions.create({
-      model: MODEL_ID,
-      messages: [{ role: "user", content: prompt }],
-      // 强制让 AI 返回 JSON 格式
-      response_format: { type: "json_object" }
-    });
-
-    const content = response.choices[0].message.content;
-    if (content) {
-      return JSON.parse(content) as SentimentResult;
-    }
-    return { sentiment: 'neutral', confidence: 0 };
+    const content = await callAiBackend([{ role: "user", content: prompt }]);
+    
+    // 清理可能存在的 Markdown 标签
+    const jsonString = content.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(jsonString) as SentimentResult;
     
   } catch (error) {
-    console.error("Error analyzing sentiment:", error);
+    console.error("情感分析失败:", error);
     return { sentiment: 'neutral', confidence: 0 };
   }
 };
@@ -55,22 +62,16 @@ export const analyzeSentiment = async (text: string): Promise<SentimentResult> =
 // 2. 智能客服对话 (带人设)
 // ==========================================
 export const getChatResponse = async (userMessage: string): Promise<string> => {
-  if (!apiKey) return "系统暂时无法连接到 AI，请稍后再试。";
-
   try {
     const systemPrompt = "你是一个高端服务会所的智能客服。请用礼貌、专业、热情的语气回答用户问题。你的回答应该简短（50字以内）。如果用户要求人工服务、投诉或遇到你无法回答的问题，请回复'已为您转接人工服务，请稍候...'。";
 
-    const response = await client.chat.completions.create({
-      model: MODEL_ID,
-      messages: [
-        { role: "system", content: systemPrompt }, // 人设放在这里
-        { role: "user", content: userMessage }
-      ]
-    });
+    return await callAiBackend([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMessage }
+    ]);
 
-    return response.choices[0].message.content || "抱歉，我没有听清，请再说一遍。";
   } catch (error) {
-    console.error("Error generating chat response:", error);
+    console.error("智能客服响应失败:", error);
     return "系统繁忙，请稍后再试。";
   }
 };

@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Clock, Check, X, User, List, DollarSign, Loader2, Ban, Trash2, AlertTriangle, CheckCircle, Circle, CheckSquare } from 'lucide-react';
-import { fetchAppointments, updateAppointmentStatus, settleAppointment, deleteAppointment, bulkDeleteAppointments } from '../services/dataService';
+import { Calendar, Clock, Check, X, User, List, DollarSign, Loader2, Ban, Trash2, AlertTriangle, CheckCircle, Circle, CheckSquare, Settings, Edit2, Save } from 'lucide-react';
+import { fetchAppointments, updateAppointmentStatus, settleAppointment, deleteAppointment, bulkDeleteAppointments, fetchSlotConfigs, updateSlotCapacity } from '../services/dataService';
 import { Appointment } from '../types';
 import { SERVICES_CATALOG } from '../constants';
 import { supabase } from '../lib/supabaseClient';
 
-const MAX_CAPACITY = 2;
+const DEFAULT_CAPACITY = 2;
 
 interface AppointmentManagerProps {
   showToast?: (message: string, type: 'success' | 'error' | 'info') => void;
@@ -41,6 +41,7 @@ const AppointmentManager: React.FC<AppointmentManagerProps> = ({ showToast = (_m
   const [filter, setFilter] = useState('all');
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
+  const [slotConfigs, setSlotConfigs] = useState<Record<string, number>>({});
   
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -56,21 +57,39 @@ const AppointmentManager: React.FC<AppointmentManagerProps> = ({ showToast = (_m
   }>({ show: false, id: null });
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Capacity Edit State
+  const [editingSlot, setEditingSlot] = useState<{slot: string, capacity: number} | null>(null);
+  const [isSavingCapacity, setIsSavingCapacity] = useState(false);
+
   const next7Days = useMemo(() => getNextSevenDays(), []);
 
   const loadData = async () => {
-    const data = await fetchAppointments();
-    setAppointments(data);
+    const [apptData, configData] = await Promise.all([
+      fetchAppointments(),
+      fetchSlotConfigs()
+    ]);
+    setAppointments(apptData);
+    setSlotConfigs(configData);
   };
 
   useEffect(() => {
     loadData();
-    const channel = supabase.channel('public:appointments')
+    const apptChannel = supabase.channel('public:appointments')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
-        loadData();
+        fetchAppointments().then(setAppointments);
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      
+    const configChannel = supabase.channel('public:slot_configs')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'slot_configs' }, () => {
+        fetchSlotConfigs().then(setSlotConfigs);
+      })
+      .subscribe();
+
+    return () => { 
+      supabase.removeChannel(apptChannel); 
+      supabase.removeChannel(configChannel);
+    };
   }, []);
 
   const handleStatusChange = async (id: string, newStatus: 'confirmed' | 'cancelled') => {
@@ -173,6 +192,26 @@ const AppointmentManager: React.FC<AppointmentManagerProps> = ({ showToast = (_m
     }
   };
 
+  const handleEditCapacity = (e: React.MouseEvent, slot: string) => {
+    e.stopPropagation();
+    const currentCap = slotConfigs[slot] ?? DEFAULT_CAPACITY;
+    setEditingSlot({ slot, capacity: currentCap });
+  };
+
+  const saveCapacity = async () => {
+    if (!editingSlot) return;
+    setIsSavingCapacity(true);
+    const success = await updateSlotCapacity(editingSlot.slot, editingSlot.capacity);
+    if (success) {
+       setSlotConfigs(prev => ({...prev, [editingSlot.slot]: editingSlot.capacity}));
+       showToast(`时间段 ${editingSlot.slot} 容量已更新`, 'success');
+       setEditingSlot(null);
+    } else {
+       showToast('更新失败', 'error');
+    }
+    setIsSavingCapacity(false);
+  };
+
   // Optimized Stats Calculation
   const slotStats = useMemo(() => {
     const stats: Record<string, number> = {};
@@ -250,15 +289,26 @@ const AppointmentManager: React.FC<AppointmentManagerProps> = ({ showToast = (_m
 
         {selectedDate ? (
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-             <div className="text-xs text-slate-400 mb-2">点击时段筛选预约</div>
+             <div className="text-xs text-slate-400 mb-2 flex justify-between items-center">
+               <span>点击时段筛选，点击 <Edit2 className="w-3 h-3 inline" /> 修改容量</span>
+             </div>
              {TIME_SLOTS.map(slot => {
                 const count = slotStats[slot] || 0;
+                const capacity = slotConfigs[slot] ?? DEFAULT_CAPACITY;
+                const isFull = count >= capacity;
+                
                 return (
-                  <div key={slot} onClick={() => setSelectedSlot(selectedSlot === slot ? null : slot)} className={`flex justify-between items-center p-3 rounded-lg border cursor-pointer transition-all ${selectedSlot === slot ? 'ring-2 ring-indigo-500 border-transparent bg-indigo-50' : 'border-slate-100 hover:bg-slate-50'}`}>
+                  <div key={slot} onClick={() => setSelectedSlot(selectedSlot === slot ? null : slot)} className={`flex justify-between items-center p-3 rounded-lg border cursor-pointer transition-all group ${selectedSlot === slot ? 'ring-2 ring-indigo-500 border-transparent bg-indigo-50' : 'border-slate-100 hover:bg-slate-50'}`}>
                     <span className="text-sm font-medium text-slate-700">{slot}</span>
                     <div className="flex items-center gap-2">
-                       <span className={`text-[10px] px-1.5 py-0.5 rounded border ${count >= MAX_CAPACITY ? 'bg-red-100 border-red-200 text-red-700' : count > 0 ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-green-50 border-green-100 text-green-700'}`}>{count}/{MAX_CAPACITY}</span>
-                       {count >= MAX_CAPACITY && <Ban className="w-3 h-3 text-red-400" />}
+                       <span className={`text-[10px] px-1.5 py-0.5 rounded border ${isFull ? 'bg-red-100 border-red-200 text-red-700' : count > 0 ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-green-50 border-green-100 text-green-700'}`}>{count}/{capacity}</span>
+                       <button 
+                         onClick={(e) => handleEditCapacity(e, slot)}
+                         className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                         title="修改容量"
+                       >
+                          <Edit2 className="w-3 h-3" />
+                       </button>
                     </div>
                   </div>
                 );
@@ -368,6 +418,32 @@ const AppointmentManager: React.FC<AppointmentManagerProps> = ({ showToast = (_m
         )}
       </div>
 
+      {/* Capacity Edit Modal */}
+      {editingSlot && (
+         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-xs overflow-hidden animate-zoom-in">
+              <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                 <h3 className="font-bold text-slate-800">调整客流容量</h3>
+                 <button onClick={() => setEditingSlot(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-6">
+                 <p className="text-sm text-slate-500 mb-4">
+                   设置 <strong>{editingSlot.slot}</strong> 时段的最大可预约人数。
+                 </p>
+                 <div className="flex items-center gap-3 justify-center mb-6">
+                    <button onClick={() => setEditingSlot(prev => prev ? {...prev, capacity: Math.max(0, prev.capacity - 1)} : null)} className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 text-slate-600 font-bold">-</button>
+                    <span className="text-3xl font-bold text-indigo-600 w-12 text-center">{editingSlot.capacity}</span>
+                    <button onClick={() => setEditingSlot(prev => prev ? {...prev, capacity: prev.capacity + 1} : null)} className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 text-slate-600 font-bold">+</button>
+                 </div>
+                 <button onClick={saveCapacity} disabled={isSavingCapacity} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2">
+                    {isSavingCapacity ? <Loader2 className="w-4 h-4 animate-spin" /> : '保存设置'}
+                 </button>
+              </div>
+            </div>
+         </div>
+      )}
+
+      {/* Delete Modal */}
       {deleteModal.show && (
          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-2xl w-[90%] max-w-sm overflow-hidden animate-zoom-in">

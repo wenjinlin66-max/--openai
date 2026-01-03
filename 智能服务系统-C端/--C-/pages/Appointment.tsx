@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Calendar, Clock, CheckCircle, Loader2, CalendarClock, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, Loader2, CalendarClock, ChevronRight, AlertTriangle, MessageSquare, Star, X, Send, Ban } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { Customer, Appointment } from '../types';
 import { SERVICES_LIST } from '../constants';
@@ -8,7 +8,7 @@ interface AppointmentPageProps {
   user: Customer;
 }
 
-const MAX_CAPACITY = 2;
+const DEFAULT_CAPACITY = 2;
 
 // Helper: Generate Time Slots (Static)
 const generateTimeSlots = () => {
@@ -39,7 +39,6 @@ const getISOFromLocal = (dateStr: string, timeStr: string) => {
 };
 
 const getStatusBadge = (status: string) => {
-  // Fix: Cannot find namespace 'JSX' error
   const badges: Record<string, React.ReactNode> = {
     confirmed: <span className="px-2 py-0.5 rounded bg-green-100 text-green-700 text-xs font-medium">已确认</span>,
     cancelled: <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-400 text-xs font-medium">已取消</span>,
@@ -58,10 +57,22 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [successMsg, setSuccessMsg] = useState('');
   
+  // Cancellation State
   const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  
+  // Booking Logic State
   const [bookedCounts, setBookedCounts] = useState<Record<string, number>>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [slotConfigs, setSlotConfigs] = useState<Record<string, number>>({});
+
+  // Review/Feedback State
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewAppointment, setReviewAppointment] = useState<Appointment | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewedAppointmentIds, setReviewedAppointmentIds] = useState<Set<string>>(new Set());
 
   const next7Days = useMemo(() => {
     const days = [];
@@ -94,18 +105,57 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
     }
   }, [next7Days, date]);
 
+  // Fetch Slot Configs (Capacity)
+  useEffect(() => {
+    const fetchSlotConfigs = async () => {
+        try {
+            const { data, error } = await supabase.from('slot_configs').select('time_slot, capacity');
+            if (error) {
+                console.warn("Failed to fetch slot configs, using default.", error);
+                return;
+            }
+            if (data) {
+                const configMap: Record<string, number> = {};
+                data.forEach((row: any) => {
+                    configMap[row.time_slot] = row.capacity;
+                });
+                setSlotConfigs(configMap);
+            }
+        } catch (err) {
+            console.error("Error fetching slot configs:", err);
+        }
+    };
+    fetchSlotConfigs();
+  }, []);
+
+  // Fetch Appointments and Feedback Status
   const fetchAppointments = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      // 1. Fetch Appointments
+      const { data: apptData, error: apptError } = await supabase
         .from('appointments')
         .select('*')
         .eq('customer_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setAppointments(data || []);
+      if (apptError) throw apptError;
+      setAppointments(apptData || []);
+
+      // 2. Fetch Feedback IDs for this user to know what is reviewed
+      // We only care about feedbacks that have an appointment_id linked
+      const { data: feedbackData, error: feedbackError } = await supabase
+        .from('feedbacks')
+        .select('appointment_id')
+        .eq('customer_id', user.id)
+        .not('appointment_id', 'is', null);
+
+      if (!feedbackError && feedbackData) {
+        const ids = new Set<string>(feedbackData.map((f: any) => String(f.appointment_id)));
+        setReviewedAppointmentIds(ids);
+      }
+
     } catch (err) {
-      console.error('Error fetching appointments:', err);
+      console.error('Error fetching data:', err);
     } finally {
       setLoadingHistory(false);
     }
@@ -134,6 +184,7 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
     return () => { supabase.removeChannel(channel); };
   }, [fetchAppointments, user.id]);
 
+  // Fetch Availability Logic
   useEffect(() => {
     if (!date) {
         setBookedCounts({});
@@ -164,7 +215,14 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
             });
 
             setBookedCounts(counts);
-            if (time && (counts[time] || 0) >= MAX_CAPACITY) setTime('');
+            
+            // Check if currently selected time is now full based on updated dynamic capacity
+            if (time) {
+                const maxCap = slotConfigs[time] !== undefined ? slotConfigs[time] : DEFAULT_CAPACITY;
+                if ((counts[time] || 0) >= maxCap || maxCap === 0) {
+                    setTime('');
+                }
+            }
 
         } catch (err) {
             console.error("Error fetching availability:", err);
@@ -174,8 +232,9 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
     };
 
     fetchAvailability();
-  }, [date, time]);
+  }, [date, time, slotConfigs]);
 
+  // Submit New Appointment
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!date || !time) return alert('请选择日期和时间');
@@ -183,6 +242,13 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
     setIsSubmitting(true);
     try {
       const isoAppointmentTime = getISOFromLocal(date, time);
+      const maxCap = slotConfigs[time] !== undefined ? slotConfigs[time] : DEFAULT_CAPACITY;
+
+      if (maxCap <= 0) {
+          alert("该时段暂不开放预约");
+          setIsSubmitting(false);
+          return;
+      }
 
       const { count, error: checkError } = await supabase
         .from('appointments')
@@ -192,7 +258,7 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
 
       if (checkError) throw checkError;
 
-      if ((count || 0) >= MAX_CAPACITY) {
+      if ((count || 0) >= maxCap) {
         alert(`手慢了！${time} 的名额刚刚被抢光，请选择其他时间。`);
         setBookedCounts(prev => ({ ...prev, [time]: (count || 0) }));
         setTime('');
@@ -226,6 +292,7 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
     }
   };
 
+  // Cancel Appointment Logic
   const executeCancel = async () => {
     if (!appointmentToCancel) return;
     
@@ -249,7 +316,6 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
             item.id === appointmentToCancel.id ? { ...item, status: 'cancelled' } : item
         ));
 
-        // Optimistic update of booked counts if current day
         const aptDateObj = new Date(appointmentToCancel.appointment_time);
         const year = aptDateObj.getFullYear();
         const month = String(aptDateObj.getMonth() + 1).padStart(2, '0');
@@ -269,24 +335,70 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
     }
   };
 
+  // --- REVIEW LOGIC ---
+  const openReviewModal = (apt: Appointment) => {
+    setReviewAppointment(apt);
+    setReviewRating(5);
+    setReviewText('');
+    setReviewModalOpen(true);
+  };
+
+  const submitReview = async () => {
+    if (!reviewAppointment) return;
+    setIsSubmittingReview(true);
+
+    try {
+      // Determine sentiment based on rating (Simple logic to avoid API cost/latency for this feature)
+      // >=4 Positive, 3 Neutral, <=2 Negative
+      const sentiment = reviewRating >= 4 ? 'positive' : reviewRating === 3 ? 'neutral' : 'negative';
+
+      const { error } = await supabase.from('feedbacks').insert({
+        customer_id: user.id,
+        customer_name: user.name,
+        text: reviewText || '默认好评', // If empty text
+        sentiment: sentiment,
+        appointment_id: reviewAppointment.id,
+        rating: reviewRating
+      });
+
+      if (error) throw error;
+
+      // Update local state to show "Reviewed"
+      setReviewedAppointmentIds(prev => new Set(prev).add(reviewAppointment.id));
+      
+      setSuccessMsg('感谢您的评价！');
+      setTimeout(() => setSuccessMsg(''), 3000);
+      setReviewModalOpen(false);
+    } catch (err) {
+      console.error('Review submit error:', err);
+      alert('评价提交失败，请重试');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
   const renderTimeGrid = (slots: string[], label: string) => (
     <div className="mb-4">
         <h4 className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">{label}</h4>
         <div className="grid grid-cols-4 gap-2">
             {slots.map((slot) => {
+                const maxCap = slotConfigs[slot] !== undefined ? slotConfigs[slot] : DEFAULT_CAPACITY;
                 const count = bookedCounts[slot] || 0;
-                const isFull = count >= MAX_CAPACITY;
+                const isFull = count >= maxCap;
+                const isClosed = maxCap === 0;
                 const isSelected = time === slot;
+                const isDisabled = isFull || isClosed || !date;
+
                 return (
                     <button
                         key={slot}
                         type="button"
-                        disabled={isFull || !date}
+                        disabled={isDisabled}
                         onClick={() => setTime(slot)}
                         className={`
                             relative flex flex-col items-center justify-center py-2.5 rounded-lg border text-xs transition-all
                             ${!date ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-100 text-gray-400' : ''}
-                            ${isFull 
+                            ${isDisabled
                                 ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' 
                                 : isSelected
                                     ? 'bg-indigo-600 border-indigo-600 text-white shadow-md transform scale-105'
@@ -294,11 +406,17 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
                             }
                         `}
                     >
-                        <span className="font-bold text-sm">{slot}</span>
-                        {date && (
-                            <span className="text-[10px] mt-0.5 scale-90 origin-center">
-                                {isFull ? '已满' : `余 ${MAX_CAPACITY - count}`}
-                            </span>
+                        {isClosed ? (
+                           <span className="flex items-center text-gray-400"><Ban size={12} className="mr-1"/> 休息</span>
+                        ) : (
+                           <>
+                             <span className="font-bold text-sm">{slot}</span>
+                             {date && (
+                                 <span className="text-[10px] mt-0.5 scale-90 origin-center">
+                                     {isFull ? '已满' : `余 ${maxCap - count}`}
+                                 </span>
+                             )}
+                           </>
                         )}
                     </button>
                 );
@@ -315,6 +433,7 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
       </div>
 
       <div className="p-4 space-y-6">
+        {/* Booking Form */}
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
@@ -378,6 +497,7 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
           </form>
         </div>
 
+        {/* Appointment List */}
         <div className="pb-20">
           <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg">
             <CalendarClock size={20} className="mr-2 text-indigo-600" /> 我的预约记录
@@ -392,6 +512,9 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
               {appointments.map((apt) => {
                 const isFuture = new Date(apt.appointment_time) > new Date();
                 const canCancel = (apt.status === 'pending' || apt.status === 'confirmed') && isFuture;
+                const isCompleted = apt.status === 'completed';
+                const hasReviewed = reviewedAppointmentIds.has(apt.id);
+
                 return (
                     <div key={apt.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                         <div className="flex justify-between items-start">
@@ -406,11 +529,28 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
                             </div>
                             <div className="flex flex-col items-end">{getStatusBadge(apt.status)}</div>
                         </div>
-                        {canCancel && (
-                            <div className="mt-3 pt-3 border-t border-gray-50 flex justify-end">
+                        
+                        {/* Actions: Cancel OR Review */}
+                        <div className="mt-3 pt-3 border-t border-gray-50 flex justify-end">
+                             {canCancel && (
                                 <button onClick={() => setAppointmentToCancel(apt)} className="flex items-center px-3 py-1.5 text-xs font-medium border border-red-200 text-red-500 rounded-full hover:bg-red-50 hover:border-red-300 transition-all active:scale-95">取消预约</button>
-                            </div>
-                        )}
+                             )}
+
+                             {isCompleted && (
+                                hasReviewed ? (
+                                    <span className="flex items-center px-3 py-1.5 text-xs font-medium bg-gray-50 text-gray-400 rounded-full cursor-default">
+                                        <CheckCircle size={12} className="mr-1"/> 已评价
+                                    </span>
+                                ) : (
+                                    <button 
+                                        onClick={() => openReviewModal(apt)}
+                                        className="flex items-center px-3 py-1.5 text-xs font-medium border border-indigo-200 text-indigo-600 rounded-full hover:bg-indigo-50 hover:border-indigo-300 transition-all active:scale-95"
+                                    >
+                                        <MessageSquare size={12} className="mr-1"/> 去评价
+                                    </button>
+                                )
+                             )}
+                        </div>
                     </div>
                 );
               })}
@@ -419,6 +559,7 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
         </div>
       </div>
 
+      {/* Cancel Confirmation Modal */}
       {appointmentToCancel && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 p-4">
             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl scale-100 animate-in zoom-in-95 slide-in-from-bottom-10 duration-300 mb-safe">
@@ -430,6 +571,47 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
                         <button onClick={() => setAppointmentToCancel(null)} disabled={isCancelling} className="flex-1 py-3 rounded-xl border border-gray-200 text-slate-700 font-bold hover:bg-gray-50 transition-colors">暂不取消</button>
                         <button onClick={executeCancel} disabled={isCancelling} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold shadow-lg shadow-red-200 hover:bg-red-600 transition-colors flex items-center justify-center">{isCancelling ? <Loader2 className="animate-spin w-5 h-5" /> : '确认取消'}</button>
                     </div>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Review Modal */}
+      {reviewModalOpen && reviewAppointment && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="p-4 bg-indigo-600 flex justify-between items-center text-white">
+                    <h3 className="font-bold flex items-center"><Star size={18} className="mr-2 fill-white"/> 服务评价</h3>
+                    <button onClick={() => setReviewModalOpen(false)} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
+                </div>
+                
+                <div className="p-6">
+                    <p className="text-center text-sm text-gray-500 mb-4">
+                        请为 <span className="font-bold text-slate-800">{reviewAppointment.service_name}</span> 评分
+                    </p>
+
+                    <div className="flex justify-center space-x-2 mb-6">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                            <button key={star} onClick={() => setReviewRating(star)} className="focus:outline-none transform transition-transform active:scale-110">
+                                <Star size={36} className={`${star <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-gray-200'} transition-colors`} />
+                            </button>
+                        ))}
+                    </div>
+
+                    <textarea
+                        value={reviewText}
+                        onChange={(e) => setReviewText(e.target.value)}
+                        placeholder="服务还满意吗？有没有什么建议？"
+                        className="w-full h-28 bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none mb-4"
+                    />
+
+                    <button 
+                        onClick={submitReview}
+                        disabled={isSubmittingReview}
+                        className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold shadow-lg hover:bg-slate-800 flex items-center justify-center transition-all active:scale-95"
+                    >
+                        {isSubmittingReview ? <Loader2 className="animate-spin w-5 h-5"/> : <><Send size={16} className="mr-2"/> 提交评价</>}
+                    </button>
                 </div>
             </div>
         </div>

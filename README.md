@@ -27,11 +27,11 @@ npm install
 2. 将以下内容复制进去，并填入您自己的真实 Key（根据之前的对话，您应该已经申请好了）：
 3. codeEnv
 # Google Gemini API Key
-API_KEY=AIzaSyBfZ7mx8IWJoKZDBE_lAYC6giJgE6PxhAI
+API_KEY=
 
 # Supabase 配置 (如果不填，部分功能会报错或使用默认演示配置)
-SUPABASE_URL=https://vhgwvdurnkecxvuvcrpz.supabase.co
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZoZ3d2ZHVybmtlY3h2dXZjcnB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2NTgyOTQsImV4cCI6MjA3OTIzNDI5NH0.agAQym2eYwINVHQTVak_AzM4iF8t1u9aas1VaYpJfDM
+SUPABASE_URL=
+SUPABASE_KEY=
 1. 注意：文件名前面有个点，没有文件名，只有后缀，叫 .env。不要叫 config.env 或其他名字。
 第五步：启动项目 (Run)
 1. 在 VS Code 终端中输入启动命令：

@@ -15,14 +15,12 @@ import {
   Headphones,
   Menu,
   Zap,
+  Bell,
+  Trash2,
   CheckCircle,
   XCircle,
   Info,
-  Bell,
-  Trash2,
-  Check,
-  Inbox,
-  X
+  Building2
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import CustomerScanner from './components/CustomerScanner';
@@ -33,7 +31,7 @@ import AppointmentManager from './components/AppointmentManager';
 import ChatCenter from './components/ChatCenter';
 import MarketingManager from './components/MarketingManager';
 import LoginScreen from './components/LoginScreen';
-// NotificationCenter import removed to force inline rendering
+import NotificationCenter from './components/NotificationCenter';
 import { ViewState, Customer, FeedbackItem, DashboardStats, NotificationItem } from './types';
 import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, fetchFeedbacks, addTransaction, rechargeCustomer, fetchDashboardStats, fetchNotifications, markNotificationRead, deleteNotification, deleteAllNotifications } from './services/dataService';
 import { isSupabaseConfigured, supabase, getSession, signOut } from './lib/supabaseClient';
@@ -358,7 +356,7 @@ const App: React.FC = () => {
     if (loading) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-slate-400">
-          <Loader2 className="w-10 h-10 animate-spin mb-4 text-indigo-600" />
+          <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-600" />
           <p>正在连接数据库并同步数据...</p>
         </div>
       );
@@ -412,14 +410,14 @@ const App: React.FC = () => {
         setCurrentView(view);
         setIsMobileMenuOpen(false);
       }}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group
+      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group mb-1
         ${currentView === view 
-          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' 
-          : 'text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'
+          ? 'bg-blue-50 text-blue-700 font-semibold' 
+          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
         }`}
     >
-      <Icon className={`w-5 h-5 ${currentView === view ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600'}`} />
-      <span className="font-medium text-sm">{label}</span>
+      <Icon className={`w-5 h-5 ${currentView === view ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
+      <span className="text-sm">{label}</span>
     </button>
   );
 
@@ -440,7 +438,7 @@ const App: React.FC = () => {
   if (authLoading) {
      return (
        <div className="h-screen flex items-center justify-center bg-slate-50">
-         <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+         <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
        </div>
      );
   }
@@ -450,21 +448,21 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden relative">
+    <div className="flex h-screen bg-slate-50 overflow-hidden relative font-sans text-slate-800">
       {/* Toast Container */}
       <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.map(t => (
           <div 
             key={t.id} 
-            className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border animate-slide-in-right backdrop-blur-sm ${
-              t.type === 'success' ? 'bg-emerald-50/90 border-emerald-200 text-emerald-800' :
-              t.type === 'error' ? 'bg-red-50/90 border-red-200 text-red-800' :
-              'bg-white/90 border-slate-200 text-slate-800'
+            className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border animate-slide-in-right backdrop-blur-sm ${
+              t.type === 'success' ? 'bg-emerald-50/95 border-emerald-200 text-emerald-800' :
+              t.type === 'error' ? 'bg-red-50/95 border-red-200 text-red-800' :
+              'bg-white/95 border-slate-200 text-slate-800'
             }`}
           >
             {t.type === 'success' ? <CheckCircle className="w-5 h-5 text-emerald-500" /> :
              t.type === 'error' ? <XCircle className="w-5 h-5 text-red-500" /> :
-             <Info className="w-5 h-5 text-indigo-500" />}
+             <Info className="w-5 h-5 text-blue-500" />}
             <span className="text-sm font-medium">{t.message}</span>
           </div>
         ))}
@@ -480,37 +478,41 @@ const App: React.FC = () => {
 
       {/* Sidebar */}
       <aside className={`
-        fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-100 flex flex-col p-4 shadow-xl transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:shadow-sm md:flex
+        fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200 flex flex-col p-4 shadow-xl transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:shadow-none md:flex
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="mb-8 px-2 flex items-center gap-2">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-white" />
+        <div className="mb-6 px-3 flex items-center gap-2.5">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+            <Building2 className="w-5 h-5 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">CRIMS</h1>
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 tracking-tight leading-none">CRIMS</h1>
+            <p className="text-[10px] text-slate-500 font-medium">企业版 V2.0</p>
+          </div>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto">
-          <NavItem view="dashboard" icon={LayoutDashboard} label="仪表盘" />
-          <NavItem view="scanner" icon={ScanFace} label="智能扫描" />
-          <NavItem view="customers" icon={Users} label="客户管理" />
-          <NavItem view="appointments" icon={Calendar} label="预约管理" />
-          {/* Reordered Marketing Center to below Appointments and above Chat */}
-          <NavItem view="marketing" icon={Zap} label="营销中心" />
-          <NavItem view="chat" icon={Headphones} label="客服中心" />
-          <NavItem view="assistant" icon={MessageSquareMore} label="AI 助手 (内部)" />
-          <NavItem view="feedback" icon={Settings} label="反馈与评价" />
+        <nav className="flex-1 overflow-y-auto">
+          <div className="space-y-0.5">
+            <NavItem view="dashboard" icon={LayoutDashboard} label="仪表盘" />
+            <NavItem view="scanner" icon={ScanFace} label="智能扫描" />
+            <NavItem view="customers" icon={Users} label="客户管理" />
+            <NavItem view="appointments" icon={Calendar} label="预约管理" />
+            <NavItem view="marketing" icon={Zap} label="营销中心" />
+            <NavItem view="chat" icon={Headphones} label="客服中心" />
+            <NavItem view="assistant" icon={MessageSquareMore} label="AI 助手" />
+            <NavItem view="feedback" icon={Settings} label="反馈与评价" />
+          </div>
         </nav>
 
         <div className="mt-auto space-y-4 pt-4 border-t border-slate-100">
-           <div className={`px-4 py-2 rounded-lg text-xs font-medium flex items-center gap-2 border ${isDbConnected ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-500 border-red-200'}`}>
+           <div className={`px-4 py-2 rounded-lg text-xs font-medium flex items-center gap-2 border ${isDbConnected ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-500 border-red-200'}`}>
               <Database className="w-3 h-3" />
-              {isDbConnected ? '数据库已连接' : '未连接数据库'}
+              {isDbConnected ? '系统已在线' : '离线模式'}
            </div>
 
            <button 
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2 text-slate-400 hover:text-red-500 transition-colors rounded-xl hover:bg-red-50"
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-500 hover:text-red-600 transition-colors rounded-lg hover:bg-slate-50"
            >
               <LogOut className="w-5 h-5" />
               <span className="font-medium text-sm">退出登录</span>
@@ -519,7 +521,7 @@ const App: React.FC = () => {
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-6 sticky top-0 z-20">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-20">
           <div className="flex items-center gap-4">
              <button 
                className="md:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg"
@@ -528,20 +530,20 @@ const App: React.FC = () => {
                <Menu className="w-6 h-6" />
              </button>
 
-             <h2 className="text-lg font-semibold text-slate-800 capitalize">
+             <h2 className="text-lg font-bold text-slate-800 capitalize tracking-tight">
                {getHeaderTitle()}
              </h2>
           </div>
           
           <div className="flex items-center gap-4">
             <div className="relative hidden sm:block group">
-              <Search className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${searchQuery ? 'text-indigo-500' : 'text-slate-700'}`} />
+              <Search className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${searchQuery ? 'text-blue-500' : 'text-slate-400'}`} />
               <input 
                 type="text" 
                 value={searchQuery}
                 onChange={handleSearch}
-                placeholder="搜索客户姓名..." 
-                className="pl-9 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white focus:border-indigo-200 focus:ring-2 focus:ring-indigo-100 rounded-full text-sm w-64 transition-all outline-none placeholder:text-slate-400 text-slate-700"
+                placeholder="搜索客户..." 
+                className="pl-9 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white focus:border-blue-300 focus:ring-4 focus:ring-blue-500/10 rounded-lg text-sm w-64 transition-all outline-none placeholder:text-slate-400 text-slate-700"
               />
             </div>
 
@@ -549,125 +551,48 @@ const App: React.FC = () => {
             <div className="relative" ref={notifRef}>
               <button 
                 onClick={() => setShowNotifications(!showNotifications)}
-                className={`relative p-2 transition-colors rounded-full ${showNotifications ? 'bg-indigo-900 text-white' : 'text-slate-500 hover:text-indigo-600'}`}
+                className={`relative p-2 transition-colors rounded-full ${showNotifications ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:text-blue-600 hover:bg-slate-50'}`}
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
                 )}
               </button>
 
-              {/* Inline Notification Center UI - Forces Update */}
+              {/* Use extracted NotificationCenter component */}
               {showNotifications && (
-                <div className="absolute right-0 top-full mt-3 w-[400px] bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden animate-fade-in z-50 ring-1 ring-indigo-900/5">
-                  {/* Radical UI Change: Deep Purple (Indigo-900) Header */}
-                  <div className="p-4 border-b border-indigo-800 flex justify-between items-center bg-indigo-900 sticky top-0 z-10 text-white">
-                    <h3 className="text-sm font-bold flex items-center gap-2">
-                      <Bell className="w-4 h-4" />
-                      通知中心
-                      {unreadCount > 0 && (
-                        <span className="bg-white text-indigo-900 px-2 py-0.5 rounded-full text-[10px] font-extrabold">{unreadCount}</span>
-                      )}
-                    </h3>
-                    <div className="flex gap-2 text-xs font-medium items-center">
-                      {notifications.length > 0 && (
-                        <button 
-                          onClick={(e) => handleDeleteAllNotifications(e)}
-                          className="text-white/80 hover:text-white hover:bg-white/10 px-2 py-1 rounded flex items-center gap-1 transition-colors border border-white/10"
-                          title="清空所有通知"
-                        >
-                          <Trash2 className="w-3 h-3" /> 清空
-                        </button>
-                      )}
-                      {unreadCount > 0 && (
-                        <button onClick={markAllAsRead} className="text-white/80 hover:text-white hover:bg-white/10 px-2 py-1 rounded transition-colors">
-                          全部已读
-                        </button>
-                      )}
-                      <button onClick={() => setShowNotifications(false)} className="text-white/60 hover:text-white ml-1 p-1 hover:bg-white/10 rounded-full">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Notification List */}
-                  <div className="max-h-[450px] overflow-y-auto bg-slate-50 scrollbar-thin scrollbar-thumb-slate-200">
-                    {notifications.length === 0 ? (
-                      <div className="p-10 text-center text-slate-400 flex flex-col items-center min-h-[200px] justify-center">
-                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 border border-slate-200 shadow-sm">
-                          <Inbox className="w-6 h-6 opacity-30" />
-                        </div>
-                        <p className="text-sm font-medium">暂无新通知</p>
-                        <p className="text-xs opacity-70 mt-1">系统消息将在这里显示</p>
-                      </div>
-                    ) : (
-                      notifications.map(n => (
-                        <div 
-                          key={n.id} 
-                          className="flex flex-col border-b border-slate-200 bg-white transition-all hover:shadow-md group relative"
-                        >
-                          {/* Content Area */}
-                          <div className={`p-4 flex gap-3 ${!n.read ? 'bg-indigo-50/30' : ''}`}>
-                            <div className={`mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm ${!n.read ? 'bg-indigo-600 ring-2 ring-indigo-100' : 'bg-slate-300'}`}></div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className={`text-sm truncate ${!n.read ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}>
-                                {n.title}
-                              </h4>
-                              <p className="text-xs text-slate-500 mt-1 leading-relaxed break-words whitespace-pre-wrap">
-                                {n.message}
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Explicit Action Footer */}
-                          <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
-                            <span className="text-[10px] text-slate-400 font-mono tracking-tight">{n.time}</span>
-                            
-                            <div className="flex items-center gap-3">
-                              {!n.read && (
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); markAsRead(n.id); }}
-                                  className="text-xs font-bold text-indigo-600 hover:bg-indigo-100 px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-1.5"
-                                >
-                                  <Check className="w-3.5 h-3.5" /> 标为已读
-                                </button>
-                              )}
-                              <button 
-                                onClick={(e) => handleDeleteNotification(e, n.id)}
-                                className="text-xs font-bold text-red-600 bg-white border border-red-100 hover:bg-red-600 hover:text-white hover:border-red-600 px-2.5 py-1.5 rounded-md transition-all flex items-center gap-1.5 shadow-sm"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 group-hover/del:scale-110 transition-transform" /> 删除
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+                <NotificationCenter
+                  notifications={notifications}
+                  unreadCount={unreadCount}
+                  onMarkAsRead={markAsRead}
+                  onMarkAllAsRead={markAllAsRead}
+                  onDelete={handleDeleteNotification}
+                  onDeleteAll={handleDeleteAllNotifications}
+                  onClose={() => setShowNotifications(false)}
+                />
               )}
             </div>
 
-            <div className="flex items-center gap-2 text-sm text-slate-700 font-medium">
-               <div className="w-8 h-8 rounded-full bg-indigo-100 border-2 border-white shadow-sm flex items-center justify-center text-indigo-600">
+            <div className="flex items-center gap-3 text-sm text-slate-700 font-medium pl-2 border-l border-slate-200">
+               <div className="w-8 h-8 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-700 font-bold text-xs">
                  {session.user?.email?.[0].toUpperCase() || 'A'}
                </div>
-               <span className="hidden md:inline">{session.user?.email?.split('@')[0]}</span>
+               <span className="hidden md:inline text-slate-600">{session.user?.email?.split('@')[0]}</span>
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6 bg-slate-50/50">
           {renderContent()}
         </div>
       </main>
 
       {/* Clear All Confirmation Modal */}
       {showClearNotifModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[90%] max-w-sm overflow-hidden animate-zoom-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/20 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-[90%] max-w-sm overflow-hidden animate-zoom-in border border-slate-100">
             <div className="p-6 text-center">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-100">
                 <Trash2 className="w-6 h-6 text-red-600" />
               </div>
               <h3 className="text-lg font-bold text-slate-900 mb-2">确认清空通知中心?</h3>
@@ -677,13 +602,13 @@ const App: React.FC = () => {
               <div className="flex gap-3">
                 <button 
                   onClick={() => setShowClearNotifModal(false)}
-                  className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors"
+                  className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors text-sm"
                 >
                   取消
                 </button>
                 <button 
                   onClick={confirmClearAllNotifications}
-                  className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
+                  className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors shadow-sm text-sm"
                 >
                   确认清空
                 </button>

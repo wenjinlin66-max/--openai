@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Lock, Mail, Loader2, Sparkles } from 'lucide-react';
+import { Lock, Mail, Loader2, Sparkles, Building2 } from 'lucide-react';
 import { signIn } from '../lib/supabaseClient';
 
 interface LoginScreenProps {
@@ -39,22 +39,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-100">
-        {/* Header */}
-        <div className="bg-indigo-600 p-8 text-center">
-          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-            <Sparkles className="w-8 h-8 text-white" />
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-md rounded-lg shadow-xl overflow-hidden border border-slate-200">
+        {/* Header - Professional Slate Dark */}
+        <div className="bg-slate-900 p-8 text-center">
+          <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border border-white/10">
+            <Building2 className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">CRIMS</h1>
-          <p className="text-indigo-100 text-sm mt-2">智能客户关系管理系统</p>
+          <h1 className="text-xl font-bold text-white tracking-wide">CRIMS 管理后台</h1>
+          <p className="text-slate-400 text-sm mt-2">企业级智能客户关系管理系统</p>
         </div>
 
         {/* Form */}
         <div className="p-8">
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">管理员邮箱</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">管理员邮箱</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input 
@@ -62,14 +62,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-slate-900"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-slate-900 text-sm"
                   placeholder="admin@crims.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">密码</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">密码</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input 
@@ -77,15 +77,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-slate-900"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-slate-900 text-sm"
                   placeholder="••••••••"
                 />
               </div>
             </div>
 
             {error && (
-              <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+              <div className="p-3 bg-red-50 text-red-700 text-xs rounded border border-red-100 flex items-center gap-2">
+                <span className="w-1 h-1 bg-red-600 rounded-full"></span>
                 {error}
               </div>
             )}
@@ -93,11 +93,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-semibold shadow-sm hover:bg-blue-700 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" /> 登录中...
+                  <Loader2 className="w-4 h-4 animate-spin" /> 登录中...
                 </>
               ) : (
                 '安全登录'
@@ -105,9 +105,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             </button>
           </form>
           
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center border-t border-slate-100 pt-4">
              <p className="text-xs text-slate-400">
-               初始设置请联系系统管理员获取账号
+               © 2024 CRIMS Enterprise. All rights reserved.
              </p>
           </div>
         </div>

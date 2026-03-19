@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Camera, Loader2, User, Save, X, Clock, ShieldCheck, UserPlus, Activity, Zap, Link, Search, Upload, Image as ImageIcon, Eye, EyeOff, FileInput } from 'lucide-react';
+import { Camera, Loader2, User, Save, X, Clock, ShieldCheck, UserPlus, Activity, Zap, Link, Search, Upload, Eye, EyeOff } from 'lucide-react';
 import { analyzeCustomerImage } from '../services/geminiService';
 import { logVisitor, updateCustomer } from '../services/dataService';
 import { AnalysisResult, Customer, CustomerTier, VisitorLog } from '../types';
@@ -35,6 +35,8 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
   const [isDragging, setIsDragging] = useState(false);
   
   const [visitorLog, setVisitorLog] = useState<VisitorLog[]>([]);
+  // Ref to access latest visitor log in processImage without adding it to dependencies
+  const visitorLogRef = useRef<VisitorLog[]>([]); 
   const [error, setError] = useState<string>('');
   
   // Create Profile Modal State
@@ -50,6 +52,11 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
   // Bind Member Modal State
   const [showBindModal, setShowBindModal] = useState(false);
   const [bindSearchQuery, setBindSearchQuery] = useState('');
+
+  // Sync ref with state
+  useEffect(() => {
+    visitorLogRef.current = visitorLog;
+  }, [visitorLog]);
 
   // 1. Auto-start Camera on Mount
   useEffect(() => {
@@ -84,8 +91,8 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
     }
   }, []);
 
-  // Motion Detection Logic
-  const checkForMotion = (context: CanvasRenderingContext2D, width: number, height: number): boolean => {
+  // Motion Detection Logic - Memoized
+  const checkForMotion = useCallback((context: CanvasRenderingContext2D, width: number, height: number): boolean => {
     const imageData = context.getImageData(0, 0, width, height);
     const currentData = imageData.data;
     let score = 0;
@@ -105,11 +112,11 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
 
     previousFrameDataRef.current = Uint8ClampedArray.from(currentData); // Clone data
     return score > MOTION_THRESHOLD;
-  };
+  }, []);
 
   // Core Logic: Visual Fingerprint Matching
-  const findMatchingCustomer = (analysis: AnalysisResult, customers: Customer[]): Customer | undefined => {
-    if (!customers || customers.length === 0) return undefined;
+  const findMatchingCustomer = useCallback((analysis: AnalysisResult, customersList: Customer[]): Customer | undefined => {
+    if (!customersList || customersList.length === 0) return undefined;
 
     const features = [
       analysis.gender, 
@@ -122,7 +129,7 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
     let bestMatch: Customer | undefined;
     let maxScore = 0;
 
-    customers.forEach(customer => {
+    customersList.forEach(customer => {
       const customerTags = (customer.tags.join(' ') + ' ' + customer.notes).toLowerCase();
       let score = 0;
 
@@ -140,7 +147,7 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
     });
 
     return bestMatch;
-  };
+  }, []);
 
   const processImage = useCallback(async (base64Image: string, isManualUpload: boolean = false) => {
     if (processing) return;
@@ -155,7 +162,7 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
       // This prevents log spamming for the same person standing there, 
       // but DOES NOT block a new person entering 5 seconds later.
       if (!isManualUpload) {
-          const lastVisitor = visitorLog[0];
+          const lastVisitor = visitorLogRef.current[0];
           const isDuplicate = lastVisitor && 
             lastVisitor.analysis.gender === analysis.gender &&
             lastVisitor.analysis.clothingStyle === analysis.clothingStyle &&
@@ -197,7 +204,7 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
     } finally {
       setProcessing(false);
     }
-  }, [processing, visitorLog, onCustomerIdentified, customers, showToast]);
+  }, [processing, customers, showToast, onCustomerIdentified, findMatchingCustomer]);
 
 
   const scanFrame = useCallback(async () => {
@@ -234,7 +241,7 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
       
       await processImage(base64Image, false);
     }
-  }, [processing, isMonitoring, processImage]);
+  }, [processing, isMonitoring, processImage, checkForMotion]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -373,16 +380,16 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
       case CustomerTier.PLATINUM: return 'border-l-4 border-l-slate-800 bg-slate-50';
       case CustomerTier.GOLD: return 'border-l-4 border-l-amber-400 bg-amber-50/50';
       case CustomerTier.SILVER: return 'border-l-4 border-l-slate-300 bg-white';
-      default: return 'border-l-4 border-l-indigo-100 bg-white';
+      default: return 'border-l-4 border-l-blue-100 bg-white';
     }
   };
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-120px)] gap-6">
-      {/* LEFT: Intelligent Monitor */}
+      {/* LEFT: Intelligent Monitor (Dark Slate Style) */}
       <div className="lg:w-2/3 flex flex-col gap-4">
         <div 
-          className={`relative bg-black rounded-2xl overflow-hidden shadow-2xl flex-1 group border border-slate-800 min-h-[400px] flex items-center justify-center transition-all duration-300 ${isDragging ? 'border-indigo-500 ring-4 ring-indigo-500/30 scale-[1.01]' : ''}`}
+          className={`relative bg-slate-900 rounded-lg overflow-hidden shadow-lg flex-1 group border border-slate-700 min-h-[400px] flex items-center justify-center transition-all duration-300 ${isDragging ? 'border-blue-500 ring-4 ring-blue-500/30' : ''}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -397,50 +404,51 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
              />
           ) : (
              <div className="text-slate-500 flex flex-col items-center p-4 text-center">
-                <Camera className="w-12 h-12 mb-2 opacity-50" />
-                <p className="text-sm">摄像头未连接</p>
-                <p className="text-xs mt-1 text-slate-600">如无法启动，请检查浏览器权限或直接拖入照片。</p>
+                <Camera className="w-12 h-12 mb-2 opacity-30" />
+                <p className="text-sm">摄像头信号中断</p>
+                <p className="text-xs mt-1 text-slate-600">请检查连接或拖入图像文件。</p>
+                {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
              </div>
           )}
           <canvas ref={canvasRef} className="hidden" />
 
           {/* Drag Overlay */}
           {isDragging && (
-             <div className="absolute inset-0 z-50 bg-indigo-600/20 backdrop-blur-sm flex flex-col items-center justify-center border-2 border-dashed border-indigo-400 m-4 rounded-xl animate-pulse pointer-events-none">
+             <div className="absolute inset-0 z-50 bg-blue-900/40 backdrop-blur-sm flex flex-col items-center justify-center border-2 border-dashed border-blue-400 m-4 rounded-lg animate-pulse pointer-events-none">
                 <Upload className="w-16 h-16 text-white mb-4" />
-                <h3 className="text-2xl font-bold text-white drop-shadow-md">释放以分析图片</h3>
+                <h3 className="text-xl font-bold text-white drop-shadow-md">释放以分析图像</h3>
              </div>
           )}
 
-          {/* HUD Overlays */}
-          <div className="absolute top-6 left-6 flex items-center gap-3 z-10 pointer-events-none">
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase backdrop-blur-md transition-all ${isMonitoring ? 'bg-red-500/90 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-slate-800/80 text-slate-400'}`}>
-              <div className={`w-2 h-2 rounded-full bg-white ${isMonitoring ? 'animate-pulse' : ''}`}></div>
-              {isMonitoring ? 'AI 实时监测中' : '监测暂停'}
+          {/* HUD Overlays (Professional Security Look) */}
+          <div className="absolute top-4 left-4 flex items-center gap-2 z-10 pointer-events-none">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded bg-black/50 border border-white/10 text-xs font-mono tracking-wider backdrop-blur-sm text-white`}>
+               <div className={`w-2 h-2 rounded-full ${isMonitoring ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`}></div>
+               {isMonitoring ? 'REC ● LIVE' : 'PAUSED'}
             </div>
             
             {isMonitoring && (
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur-md transition-all ${motionDetected ? 'bg-emerald-500/90 text-white' : 'bg-slate-800/50 text-slate-400'}`}>
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-mono backdrop-blur-sm transition-all ${motionDetected ? 'bg-emerald-900/60 border-emerald-500 text-emerald-400' : 'bg-black/50 border-transparent text-slate-400'}`}>
                 {motionDetected ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                {motionDetected ? '检测到活动' : '画面静止'}
+                {motionDetected ? 'MOTION DETECTED' : 'NO ACTIVITY'}
               </div>
             )}
 
             {processing && (
-               <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/90 text-white rounded-full text-xs font-bold backdrop-blur-md animate-fade-in">
+               <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-bold backdrop-blur-md animate-fade-in shadow-sm">
                  <Loader2 className="w-3 h-3 animate-spin" />
-                 分析画面...
+                 ANALYZING...
                </div>
             )}
           </div>
 
-          <div className="absolute bottom-6 left-6 z-10 pointer-events-none">
-             <p className="text-slate-400 text-xs font-mono">
-               上次分析: {lastScanTime ? lastScanTime.toLocaleTimeString() : '等待触发...'} 
+          <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
+             <p className="text-slate-400 text-xs font-mono bg-black/40 px-2 py-1 rounded">
+               LAST SCAN: {lastScanTime ? lastScanTime.toLocaleTimeString() : '--:--:--'} 
              </p>
           </div>
 
-          <div className="absolute top-6 right-6 z-10 flex gap-2">
+          <div className="absolute top-4 right-4 z-10 flex gap-2">
             <input 
                type="file" 
                ref={fileInputRef} 
@@ -450,75 +458,74 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
             />
             <button 
                onClick={() => fileInputRef.current?.click()}
-               className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-colors border border-white/10"
-               title="上传照片分析"
+               className="p-2 rounded bg-black/40 hover:bg-black/60 text-white backdrop-blur-sm transition-colors border border-white/10"
+               title="上传图像"
             >
-               <Upload className="w-5 h-5" />
+               <Upload className="w-4 h-4" />
             </button>
             <button 
                onClick={() => setIsMonitoring(!isMonitoring)}
-               className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-colors border border-white/10"
+               className="p-2 rounded bg-black/40 hover:bg-black/60 text-white backdrop-blur-sm transition-colors border border-white/10"
                title={isMonitoring ? "暂停监测" : "恢复监测"}
             >
-              {isMonitoring ? <Activity className="w-5 h-5" /> : <Activity className="w-5 h-5 opacity-50" />}
+              {isMonitoring ? <Activity className="w-4 h-4" /> : <Activity className="w-4 h-4 opacity-50" />}
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4">
-           <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center gap-3">
-              <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><User className="w-5 h-5" /></div>
+           <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-3">
+              <div className="p-2 bg-blue-50 rounded text-blue-600"><User className="w-5 h-5" /></div>
               <div>
                 <p className="text-xs text-slate-500">今日客流</p>
                 <p className="text-lg font-bold text-slate-800">{visitorLog.length} 人</p>
               </div>
            </div>
-           <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center gap-3">
-              <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600"><ShieldCheck className="w-5 h-5" /></div>
+           <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-3">
+              <div className="p-2 bg-emerald-50 rounded text-emerald-600"><ShieldCheck className="w-5 h-5" /></div>
               <div>
                 <p className="text-xs text-slate-500">会员识别</p>
                 <p className="text-lg font-bold text-slate-800">{visitorLog.filter(v => v.customer).length} 人</p>
               </div>
            </div>
-           <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center gap-3">
-              <div className="p-2 bg-amber-50 rounded-lg text-amber-600"><Zap className="w-5 h-5" /></div>
+           <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-3">
+              <div className="p-2 bg-amber-50 rounded text-amber-600"><Zap className="w-5 h-5" /></div>
               <div>
                 <p className="text-xs text-slate-500">状态</p>
-                <p className="text-lg font-bold text-slate-800">{motionDetected ? '分析中' : '待机'}</p>
+                <p className="text-lg font-bold text-slate-800">{motionDetected ? '监控中' : '待机'}</p>
               </div>
            </div>
         </div>
       </div>
 
-      {/* RIGHT: Live Visitor Stream */}
-      <div className="lg:w-1/3 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-indigo-600" /> 访客流水
+      {/* RIGHT: Live Visitor Stream (Clean List) */}
+      <div className="lg:w-1/3 bg-white rounded-lg border border-slate-200 flex flex-col overflow-hidden shadow-sm">
+        <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+          <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+            <Clock className="w-4 h-4 text-blue-600" /> 访客记录流水
           </h3>
-          <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">实时</span>
+          <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold uppercase">Live</span>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 relative">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 relative bg-slate-50/50">
           {visitorLog.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60">
-               <Activity className="w-12 h-12 mb-2" />
-               <p className="text-sm">等待客户进店...</p>
+               <Activity className="w-12 h-12 mb-2 stroke-1" />
+               <p className="text-sm">暂无访客记录</p>
                <div className="mt-4 flex gap-2">
                   <button 
                     onClick={() => fileInputRef.current?.click()} 
-                    className="text-indigo-600 text-xs border border-indigo-200 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-2"
+                    className="text-blue-600 text-xs border border-blue-200 bg-white px-3 py-1.5 rounded hover:bg-blue-50 transition-colors flex items-center gap-2"
                   >
-                      <Upload className="w-3 h-3" /> 上传照片测试
+                      <Upload className="w-3 h-3" /> 模拟识别
                   </button>
                </div>
-               <p className="text-[10px] mt-2 text-slate-400">或直接将照片拖入左侧区域</p>
             </div>
           ) : (
             visitorLog.map((log) => (
               <div 
                 key={log.id} 
-                className={`relative p-4 rounded-xl shadow-sm border-r border-t border-b transition-all animate-slide-in-right group hover:shadow-md ${getTierStyle(log.customer?.tier)}`}
+                className={`relative p-4 rounded-lg shadow-sm border bg-white transition-all animate-slide-in-right hover:shadow-md ${getTierStyle(log.customer?.tier)}`}
               >
                 <div className="absolute top-3 right-3 text-[10px] font-mono text-slate-400">
                   {log.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -530,55 +537,49 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
                       <img 
                         src={log.customer.avatarUrl} 
                         alt={log.customer.name} 
-                        className={`w-12 h-12 rounded-full object-cover border-2 ${log.customer.tier === CustomerTier.GOLD || log.customer.tier === CustomerTier.PLATINUM ? 'border-amber-400' : 'border-white'} shadow-sm`}
+                        className={`w-10 h-10 rounded object-cover border ${log.customer.tier === CustomerTier.GOLD || log.customer.tier === CustomerTier.PLATINUM ? 'border-amber-400' : 'border-slate-200'}`}
                       />
                       <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 border border-white">
-                        <ShieldCheck className="w-3 h-3" />
+                        <ShieldCheck className="w-2.5 h-2.5" />
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-bold text-slate-900 truncate">{log.customer.name}</h4>
-                      <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded border mt-0.5 mb-1.5
-                        ${log.customer.tier === CustomerTier.PLATINUM ? 'bg-slate-800 text-white border-slate-700' : 
-                          log.customer.tier === CustomerTier.GOLD ? 'bg-amber-100 text-amber-800 border-amber-200' : 
-                          'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                        {log.customer.tier}
-                      </span>
-                      <p className="text-xs text-slate-600 leading-snug bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <span className="font-semibold text-indigo-600">接待建议:</span> {log.analysis.suggestedAction}
+                      <div className="flex items-baseline gap-2">
+                         <h4 className="text-sm font-bold text-slate-900 truncate">{log.customer.name}</h4>
+                         <span className="text-[10px] text-slate-500 truncate">{log.customer.tier}</span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-snug bg-blue-50/50 p-2 rounded border border-blue-100 mt-2">
+                        <span className="font-semibold text-blue-700">Suggestion:</span> {log.analysis.suggestedAction}
                       </p>
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-start gap-3">
-                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 border-2 border-white shadow-sm">
-                        <User className="w-6 h-6" />
+                     <div className="w-10 h-10 rounded bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
+                        <User className="w-5 h-5" />
                      </div>
                      <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                            <h4 className="text-sm font-bold text-slate-700">陌生访客</h4>
-                           <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] rounded border border-slate-200">未建档</span>
+                           <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] rounded border border-slate-200">New</span>
                         </div>
                         <div className="text-xs text-slate-500 space-y-1">
-                           <p className="leading-snug mt-1">
-                             <span className="font-bold">特征:</span> {log.analysis.distinctiveFeatures || log.analysis.clothingStyle}
+                           <p className="leading-snug mt-1 text-slate-600">
+                             特征: {log.analysis.distinctiveFeatures || log.analysis.clothingStyle}
                            </p>
-                           <div className="flex gap-2 mt-1 opacity-70">
-                             <span>{log.analysis.estimatedAge}</span> • <span>{log.analysis.gender}</span> • <span>{log.analysis.mood}</span>
-                           </div>
                         </div>
                         <div className="flex gap-2 mt-2">
                            <button 
                              onClick={() => handleCreateClick(log.analysis)}
-                             className="flex-1 py-1.5 text-xs flex items-center justify-center gap-1 border border-dashed border-indigo-300 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+                             className="flex-1 py-1.5 text-[10px] font-medium flex items-center justify-center gap-1 border border-blue-200 text-blue-600 rounded hover:bg-blue-50 transition-colors"
                            >
-                             <UserPlus className="w-3 h-3" /> 快速建档
+                             <UserPlus className="w-3 h-3" /> 建档
                            </button>
                            <button 
                              onClick={() => handleBindClick(log.analysis)}
-                             className="flex-1 py-1.5 text-xs flex items-center justify-center gap-1 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
+                             className="flex-1 py-1.5 text-[10px] font-medium flex items-center justify-center gap-1 border border-slate-200 text-slate-600 rounded hover:bg-slate-50 transition-colors"
                            >
-                             <Link className="w-3 h-3" /> 关联会员
+                             <Link className="w-3 h-3" /> 关联
                            </button>
                         </div>
                      </div>
@@ -592,37 +593,37 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
 
       {/* Create Profile Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[90%] max-w-md overflow-hidden animate-fade-in-up">
-             <div className="bg-indigo-600 p-4 flex justify-between items-center">
-                <h3 className="text-white font-bold flex items-center gap-2">
-                  <UserPlus className="w-5 h-5" /> 新建客户档案
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-2xl w-[90%] max-w-md overflow-hidden animate-fade-in-up">
+             <div className="bg-blue-600 p-4 flex justify-between items-center">
+                <h3 className="text-white font-bold flex items-center gap-2 text-sm">
+                  <UserPlus className="w-4 h-4" /> 新建客户档案
                 </h3>
-                <button onClick={() => setShowCreateModal(false)} className="text-indigo-100 hover:text-white">
-                  <X className="w-5 h-5" />
+                <button onClick={() => setShowCreateModal(false)} className="text-blue-100 hover:text-white">
+                  <X className="w-4 h-4" />
                 </button>
              </div>
              
              <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">客户姓名 <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">客户姓名 <span className="text-red-500">*</span></label>
                   <input 
                     type="text" 
                     required
                     value={newCustomerForm.name}
                     onChange={e => setNewCustomerForm({...newCustomerForm, name: e.target.value})}
                     placeholder="请输入姓名"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm text-slate-900"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">会员等级</label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">会员等级</label>
                     <select 
                       value={newCustomerForm.tier}
                       onChange={e => setNewCustomerForm({...newCustomerForm, tier: e.target.value as CustomerTier})}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-slate-900"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900"
                     >
                        {Object.values(CustomerTier).map(tier => (
                          <option key={tier} value={tier}>{tier}</option>
@@ -630,23 +631,23 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
                     </select>
                   </div>
                   <div>
-                     <label className="block text-sm font-medium text-slate-700 mb-1">视觉标签</label>
+                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">视觉标签</label>
                      <input 
                         type="text" 
                         value={newCustomerForm.tags}
                         onChange={e => setNewCustomerForm({...newCustomerForm, tags: e.target.value})}
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-slate-900"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900"
                       />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">备注信息</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">备注信息</label>
                   <textarea 
                     rows={3}
                     value={newCustomerForm.notes}
                     onChange={e => setNewCustomerForm({...newCustomerForm, notes: e.target.value})}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm resize-none text-slate-900"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-900"
                   ></textarea>
                 </div>
 
@@ -654,13 +655,13 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
                   <button 
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="flex-1 py-2.5 border border-slate-300 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-colors"
+                    className="flex-1 py-2 border border-slate-300 text-slate-600 rounded font-medium hover:bg-slate-50 transition-colors text-sm"
                   >
                     取消
                   </button>
                   <button 
                     type="submit"
-                    className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+                    className="flex-1 py-2 bg-blue-600 text-white rounded font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm"
                   >
                     <Save className="w-4 h-4" />
                     保存档案
@@ -673,20 +674,20 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
 
       {/* Bind Member Modal */}
       {showBindModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-[90%] max-w-md overflow-hidden animate-fade-in-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-2xl w-[90%] max-w-md overflow-hidden animate-fade-in-up">
              <div className="bg-slate-800 p-4 flex justify-between items-center">
-                <h3 className="text-white font-bold flex items-center gap-2">
-                  <Link className="w-5 h-5" /> 关联已有会员
+                <h3 className="text-white font-bold flex items-center gap-2 text-sm">
+                  <Link className="w-4 h-4" /> 关联已有会员
                 </h3>
                 <button onClick={() => setShowBindModal(false)} className="text-slate-400 hover:text-white">
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
              </div>
              
              <div className="p-6">
-                <p className="text-sm text-slate-500 mb-4">
-                  关联后，系统将自动记住该客户当前的视觉特征（如：{pendingAnalysis?.distinctiveFeatures || pendingAnalysis?.clothingStyle}），下次到店可自动识别。
+                <p className="text-xs text-slate-500 mb-4 bg-slate-50 p-2 rounded border border-slate-100">
+                  关联后，系统将更新该客户的视觉特征（{pendingAnalysis?.distinctiveFeatures || pendingAnalysis?.clothingStyle}）。
                 </p>
                 
                 <div className="relative mb-4">
@@ -697,11 +698,11 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
                     onChange={e => setBindSearchQuery(e.target.value)}
                     placeholder="搜索姓名、手机号..."
                     autoFocus
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-slate-900"
+                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900"
                   />
                 </div>
 
-                <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50 mb-4">
+                <div className="max-h-48 overflow-y-auto border border-slate-100 rounded divide-y divide-slate-50 mb-4">
                    {customers.filter(c => c.name.toLowerCase().includes(bindSearchQuery.toLowerCase())).length === 0 ? (
                       <div className="p-4 text-center text-xs text-slate-400">未找到匹配客户</div>
                    ) : (
@@ -712,25 +713,23 @@ const CustomerScanner: React.FC<CustomerScannerProps> = ({ onCustomerIdentified,
                           <div 
                             key={c.id} 
                             onClick={() => confirmBind(c)}
-                            className="p-3 flex items-center gap-3 hover:bg-indigo-50 cursor-pointer transition-colors"
+                            className="p-3 flex items-center gap-3 hover:bg-blue-50 cursor-pointer transition-colors"
                           >
-                             <img src={c.avatarUrl} alt={c.name} className="w-8 h-8 rounded-full bg-slate-200 object-cover" />
+                             <img src={c.avatarUrl} alt={c.name} className="w-8 h-8 rounded bg-slate-200 object-cover" />
                              <div className="flex-1">
                                 <p className="text-sm font-bold text-slate-800">{c.name}</p>
-                                <div className="flex items-center gap-2 text-xs text-slate-500">
-                                   <span>{c.tier}</span>
-                                   <span className="text-slate-300">|</span>
-                                   <span className="truncate max-w-[100px]">{c.tags.join(', ')}</span>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                   <span className="bg-slate-100 px-1 rounded">{c.tier}</span>
                                 </div>
                              </div>
-                             <button className="text-xs bg-indigo-600 text-white px-2 py-1 rounded">关联</button>
+                             <button className="text-xs bg-white border border-blue-200 text-blue-600 px-2 py-1 rounded hover:bg-blue-600 hover:text-white transition-colors">关联</button>
                           </div>
                         ))
                    )}
                 </div>
                 <button 
                   onClick={() => setShowBindModal(false)}
-                  className="w-full py-2 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-colors"
+                  className="w-full py-2 border border-slate-200 text-slate-600 rounded font-medium hover:bg-slate-50 transition-colors text-sm"
                 >
                   取消
                 </button>

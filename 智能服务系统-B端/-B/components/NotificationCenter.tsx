@@ -23,14 +23,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   onClose
 }) => {
   return (
-    <div className="absolute right-0 top-full mt-3 w-[400px] bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden animate-fade-in z-50 ring-1 ring-slate-900/5">
-      {/* Header - Dark Purple for High Contrast Check */}
-      <div className="p-4 border-b border-indigo-700 flex justify-between items-center bg-indigo-600 sticky top-0 z-10 text-white">
+    <div className="absolute right-0 top-full mt-3 w-[400px] bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden animate-fade-in z-50 ring-1 ring-black/5">
+      {/* Header - Professional Blue */}
+      <div className="p-4 border-b border-blue-700 flex justify-between items-center bg-blue-600 sticky top-0 z-10 text-white">
         <h3 className="text-sm font-bold flex items-center gap-2">
           <Bell className="w-4 h-4" />
           通知中心
           {unreadCount > 0 && (
-            <span className="bg-white text-indigo-600 px-2 py-0.5 rounded-full text-[10px] font-extrabold">{unreadCount}</span>
+            <span className="bg-white text-blue-600 px-1.5 py-0.5 rounded text-[10px] font-extrabold min-w-[20px] text-center">{unreadCount}</span>
           )}
         </h3>
         <div className="flex gap-2 text-xs font-medium items-center">
@@ -68,11 +68,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
           notifications.map(n => (
             <div 
               key={n.id} 
-              className="flex flex-col border-b border-slate-200 bg-white transition-all hover:shadow-md group relative"
+              className="flex flex-col border-b border-slate-100 bg-white transition-all hover:bg-slate-50 group relative"
             >
               {/* Content Area */}
-              <div className={`p-4 flex gap-3 ${!n.read ? 'bg-indigo-50/30' : ''}`}>
-                <div className={`mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm ${!n.read ? 'bg-indigo-600 ring-2 ring-indigo-100' : 'bg-slate-300'}`}></div>
+              <div className={`p-4 flex gap-3 ${!n.read ? 'bg-blue-50/40' : ''}`}>
+                <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 shadow-sm ${!n.read ? 'bg-blue-600 ring-2 ring-blue-100' : 'bg-slate-300'}`}></div>
                 <div className="flex-1 min-w-0">
                   <h4 className={`text-sm truncate ${!n.read ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}>
                     {n.title}
@@ -84,23 +84,23 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
               </div>
 
               {/* Explicit Action Footer */}
-              <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+              <div className="px-4 py-2 bg-white border-t border-slate-50 flex justify-between items-center">
                 <span className="text-[10px] text-slate-400 font-mono tracking-tight">{n.time}</span>
                 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
                   {!n.read && (
                     <button 
                       onClick={(e) => { e.stopPropagation(); onMarkAsRead(n.id); }}
-                      className="text-xs font-bold text-indigo-600 hover:bg-indigo-100 px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-1.5"
+                      className="text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1"
                     >
-                      <Check className="w-3.5 h-3.5" /> 标为已读
+                      <Check className="w-3 h-3" /> 标为已读
                     </button>
                   )}
                   <button 
                     onClick={(e) => onDelete(e, n.id)}
-                    className="text-xs font-bold text-red-600 hover:bg-red-100 px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-1.5 group/del border border-transparent hover:border-red-200"
+                    className="text-[10px] font-bold text-slate-400 hover:text-red-600 transition-colors flex items-center gap-1"
                   >
-                    <Trash2 className="w-3.5 h-3.5 group-hover/del:scale-110 transition-transform" /> 删除
+                    <Trash2 className="w-3 h-3" /> 删除
                   </button>
                 </div>
               </div>

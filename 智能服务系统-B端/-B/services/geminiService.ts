@@ -86,33 +86,33 @@ export const analyzeCustomerImage = async (base64Image: string): Promise<Analysi
 // 2. 智能店长助理 (上下文对话)
 // ==========================================
 export const askServiceAssistant = async (
-  question: string, 
+  history: { role: 'user' | 'assistant', content: string }[], 
   context: string
 ): Promise<string> => {
   
-  const systemInstruction = `你并不是一个普通的聊天机器人，你是高端服务店 "Lumina Services" 的**智能店长助理**。
-  你拥有查看店铺实时数据库的权限。你的任务是基于提供的数据快照，回答用户（店员/老板）关于店铺运营、客户情况、财务状况的问题。
+  // 1. 构建系统提示词（人设 + 实时数据）
+  const systemInstruction = {
+    role: "system",
+    content: `你并不是一个普通的聊天机器人，你是高端服务店 "Lumina Services" 的智能店长助理。
+    你拥有查看店铺实时数据库的权限。你的任务是基于提供的最新数据快照，回答用户的问题。
+    
+    ### 实时数据库快照：
+    ${context}
 
-  ### 你的核心能力：
-  1. **数据查询**：准确回答“今天谁预约了？”、“谁是消费最高的客户？”等问题。
-  2. **商业分析**：分析店铺运营健康度。
-  3. **客户洞察**：提供接待建议。
-
-  ### 实时数据库快照：
-  ${context}
-
-  ### 回复规则：
-  1. 基于事实回答。2. 专业简洁。3. 始终使用中文。
-  `;
+    ### 回复规则：
+    1. 基于事实回答。2. 专业简洁。3. 始终使用中文。`
+  };
 
   try {
-    return await callAiBackend([
-      { role: "system", content: systemInstruction },
-      { role: "user", content: question }
-    ]);
+    // 2. 记忆限制：只取最近的 10 条对话记录，防止 Token 消耗过大
+    const recentHistory = history.slice(-10);
+
+    // 3. 组合：[系统人设, ...历史记录]
+    return await callAiBackend([systemInstruction, ...recentHistory]);
+
   } catch (error) {
     console.error("助手对话失败:", error);
-    return "抱歉，AI 服务暂时不可用。";
+    return "抱歉，AI 助手连接超时，请稍后再试。";
   }
 };
 

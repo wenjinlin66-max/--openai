@@ -95,11 +95,18 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, onBack }) => {
             text: '已为您转接人工客服，请稍候...'
          });
       } else {
-         // 3. Call AI
-         const aiReply = await getChatResponse(userText);
-         
-         // 4. Save Bot Message
-         await supabase.from('chat_messages').insert({
+          // 3. Call AI
+         const historyForAI = messages
+           .slice(-8)
+           .map((message) => ({
+             role: message.sender === 'user' ? 'user' as const : 'assistant' as const,
+             content: message.text
+           }));
+
+         const aiReply = await getChatResponse(userText, user, historyForAI);
+          
+          // 4. Save Bot Message
+          await supabase.from('chat_messages').insert({
             customer_id: user.id,
             sender: 'bot',
             text: aiReply
@@ -133,7 +140,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, onBack }) => {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
             <div className="text-center text-gray-400 text-xs mt-10">
-                <p>您可以询问服务项目、价格或要求人工服务。</p>
+                <p>您可以询问营业时间、服务项目、预约规则、会员权益、当前活动或要求人工服务。</p>
             </div>
         )}
         

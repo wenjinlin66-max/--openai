@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Calendar, Clock, CheckCircle, Loader2, CalendarClock, ChevronRight, AlertTriangle, MessageSquare, Star, X, Send, Ban } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
-import { Customer, Appointment } from '../types';
-import { SERVICES_LIST } from '../constants';
+import { Customer, Appointment, ServiceCatalogItem } from '../types';
+import { fetchActiveServiceCatalog } from '../services/serviceCatalog';
 
 interface AppointmentPageProps {
   user: Customer;
@@ -17,14 +17,12 @@ const generateTimeSlots = () => {
   // Morning: 9:00 - 11:30
   for (let i = 9; i < 12; i++) {
     morningSlots.push(`${i.toString().padStart(2, '0')}:00`);
-    if (i !== 11) morningSlots.push(`${i.toString().padStart(2, '0')}:30`);
-    else morningSlots.push(`${i.toString().padStart(2, '0')}:30`);
+    morningSlots.push(`${i.toString().padStart(2, '0')}:30`);
   }
   // Afternoon: 15:00 - 16:30
   for (let i = 15; i < 17; i++) {
     afternoonSlots.push(`${i.toString().padStart(2, '0')}:00`);
-    if (i !== 16) afternoonSlots.push(`${i.toString().padStart(2, '0')}:30`);
-    else afternoonSlots.push(`${i.toString().padStart(2, '0')}:30`);
+    afternoonSlots.push(`${i.toString().padStart(2, '0')}:30`);
   }
   return { morningSlots, afternoonSlots };
 };
@@ -48,8 +46,21 @@ const getStatusBadge = (status: string) => {
   return badges[status] || badges.pending;
 };
 
+const getRecordCategoryMeta = (key: 'pending' | 'confirmed' | 'completedPendingReview' | 'completedReviewed' | 'cancelled') => {
+  const meta = {
+    pending: { title: '待确认', empty: '暂无待确认预约' },
+    confirmed: { title: '已确认', empty: '暂无已确认预约' },
+    completedPendingReview: { title: '待评价', empty: '暂无待评价预约' },
+    completedReviewed: { title: '已评价', empty: '暂无已评价预约' },
+    cancelled: { title: '已取消', empty: '暂无已取消预约' },
+  };
+  return meta[key];
+};
+
 const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
-  const [service, setService] = useState(SERVICES_LIST[0].name);
+  const [serviceCatalog, setServiceCatalog] = useState<ServiceCatalogItem[]>([]);
+  const [service, setService] = useState('');
+  const [serviceCatalogReady, setServiceCatalogReady] = useState(false);
   const [date, setDate] = useState<string>(''); 
   const [time, setTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,6 +84,9 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
   const [reviewText, setReviewText] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewedAppointmentIds, setReviewedAppointmentIds] = useState<Set<string>>(new Set());
+  const [activeRecordTab, setActiveRecordTab] = useState<'all' | 'pending' | 'confirmed' | 'completedPendingReview' | 'completedReviewed' | 'cancelled'>('all');
+  const [serviceHighlight, setServiceHighlight] = useState<string>('');
+  const [jumpHint, setJumpHint] = useState('');
 
   const next7Days = useMemo(() => {
     const days = [];
@@ -104,6 +118,53 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
       setDate(next7Days[0].fullDate);
     }
   }, [next7Days, date]);
+
+  useEffect(() => {
+    const fetchServiceCatalog = async () => {
+      try {
+        const mapped = await fetchActiveServiceCatalog();
+        setServiceCatalog(mapped);
+        setService((current) => current && mapped.some((item) => item.name === current) ? current : mapped[0]?.name || '');
+      } catch (error) {
+        console.error('加载服务目录失败:', error);
+      } finally {
+        setServiceCatalogReady(true);
+      }
+    };
+
+    fetchServiceCatalog();
+  }, []);
+
+  useEffect(() => {
+    if (!serviceCatalogReady) return;
+
+    const preselectedService = localStorage.getItem('crims-preselected-service');
+    if (!preselectedService) return;
+
+    const matchedCatalogService = serviceCatalog.find((item) => item.name === preselectedService);
+    if (matchedCatalogService) {
+      setService(matchedCatalogService.name);
+      setServiceHighlight(matchedCatalogService.name);
+      setJumpHint(`已为您定位到推荐服务：${matchedCatalogService.name}`);
+    }
+
+    localStorage.removeItem('crims-preselected-service');
+
+    const clearTimer = window.setTimeout(() => {
+      setServiceHighlight('');
+      setJumpHint('');
+    }, 2600);
+
+    return () => window.clearTimeout(clearTimer);
+  }, [serviceCatalog, serviceCatalogReady]);
+
+  useEffect(() => {
+    const appointmentTab = localStorage.getItem('crims-appointment-record-tab');
+    if (!appointmentTab) return;
+
+    setActiveRecordTab(appointmentTab as 'all' | 'pending' | 'confirmed' | 'completedPendingReview' | 'completedReviewed' | 'cancelled');
+    localStorage.removeItem('crims-appointment-record-tab');
+  }, []);
 
   // Fetch Slot Configs (Capacity)
   useEffect(() => {
@@ -425,6 +486,101 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
     </div>
   );
 
+  const groupedAppointments = useMemo(() => {
+    const groups = {
+      pending: [] as Appointment[],
+      confirmed: [] as Appointment[],
+      completedPendingReview: [] as Appointment[],
+      completedReviewed: [] as Appointment[],
+      cancelled: [] as Appointment[],
+    };
+
+    appointments.forEach((apt) => {
+      if (apt.status === 'pending') {
+        groups.pending.push(apt);
+        return;
+      }
+      if (apt.status === 'confirmed') {
+        groups.confirmed.push(apt);
+        return;
+      }
+      if (apt.status === 'cancelled') {
+        groups.cancelled.push(apt);
+        return;
+      }
+      if (apt.status === 'completed') {
+        if (reviewedAppointmentIds.has(apt.id)) groups.completedReviewed.push(apt);
+        else groups.completedPendingReview.push(apt);
+      }
+    });
+
+    return groups;
+  }, [appointments, reviewedAppointmentIds]);
+
+  const appointmentRecordTabs = useMemo(() => {
+    const items = [
+      { key: 'all' as const, label: '全部', count: appointments.length },
+      { key: 'pending' as const, label: '待确认', count: groupedAppointments.pending.length },
+      { key: 'confirmed' as const, label: '已确认', count: groupedAppointments.confirmed.length },
+      { key: 'completedPendingReview' as const, label: '待评价', count: groupedAppointments.completedPendingReview.length },
+      { key: 'completedReviewed' as const, label: '已评价', count: groupedAppointments.completedReviewed.length },
+      { key: 'cancelled' as const, label: '已取消', count: groupedAppointments.cancelled.length },
+    ];
+
+    return items;
+  }, [appointments.length, groupedAppointments]);
+
+  const activeAppointmentsForTab = useMemo(() => {
+    if (activeRecordTab === 'all') return appointments;
+    return groupedAppointments[activeRecordTab];
+  }, [activeRecordTab, appointments, groupedAppointments]);
+
+  const renderAppointmentCard = (apt: Appointment) => {
+    const isFuture = new Date(apt.appointment_time) > new Date();
+    const canCancel = (apt.status === 'pending' || apt.status === 'confirmed') && isFuture;
+    const isCompleted = apt.status === 'completed';
+    const hasReviewed = reviewedAppointmentIds.has(apt.id);
+
+    return (
+      <div key={apt.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex justify-between items-start gap-3">
+          <div className="flex flex-col">
+            <h4 className="font-bold text-slate-800 text-sm mb-1">{apt.service_name}</h4>
+            <div className="flex items-center text-xs text-gray-500 flex-wrap">
+              <Calendar size={12} className="mr-1" />
+              {new Date(apt.appointment_time).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+              <Clock size={12} className="ml-2 mr-1" />
+              {new Date(apt.appointment_time).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+          <div className="flex flex-col items-end">{getStatusBadge(apt.status)}</div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-gray-50 flex justify-end">
+          {canCancel && (
+            <button onClick={() => setAppointmentToCancel(apt)} className="flex items-center px-3 py-1.5 text-xs font-medium border border-red-200 text-red-500 rounded-full hover:bg-red-50 hover:border-red-300 transition-all active:scale-95">
+              取消预约
+            </button>
+          )}
+
+          {isCompleted && (
+            hasReviewed ? (
+              <span className="flex items-center px-3 py-1.5 text-xs font-medium bg-gray-50 text-gray-400 rounded-full cursor-default">
+                <CheckCircle size={12} className="mr-1" /> 已评价
+              </span>
+            ) : (
+              <button onClick={() => openReviewModal(apt)} className="flex items-center px-3 py-1.5 text-xs font-medium border border-indigo-200 text-indigo-600 rounded-full hover:bg-indigo-50 hover:border-indigo-300 transition-all active:scale-95">
+                <MessageSquare size={12} className="mr-1" /> 去评价
+              </button>
+            )
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const activeTabMeta = activeRecordTab === 'all' ? { title: '全部记录', empty: '暂无预约记录' } : getRecordCategoryMeta(activeRecordTab);
+
   return (
     <div className="flex flex-col min-h-full bg-gray-50 relative">
       <div className="px-6 pt-12 pb-4 bg-white sticky top-0 z-10 shadow-sm">
@@ -439,13 +595,17 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
             <div>
               <label className="block text-sm font-bold text-slate-800 mb-2">选择服务</label>
               <div className="relative">
-                <select 
+                 <select 
                     value={service} 
                     onChange={(e) => setService(e.target.value)}
-                    className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium text-slate-700 appearance-none"
+                    disabled={!serviceCatalogReady}
+                    className={`w-full p-3.5 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium text-slate-700 appearance-none transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
+                      serviceHighlight === service ? 'border-indigo-400 ring-2 ring-indigo-200 bg-indigo-50' : 'border-gray-200'
+                    }`}
                   >
-                    {SERVICES_LIST.map(s => <option key={s.name} value={s.name}>{s.name} (¥{s.price})</option>)}
-                </select>
+                    {!serviceCatalogReady && <option value="">正在加载服务目录...</option>}
+                    {serviceCatalog.map(s => <option key={s.id} value={s.name}>{s.name} (¥{s.price})</option>)}
+                 </select>
                 <ChevronRight className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" size={18} />
               </div>
             </div>
@@ -487,6 +647,12 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
               </div>
             )}
 
+            {jumpHint && (
+              <div className="flex items-center text-indigo-600 text-sm bg-indigo-50 p-3 rounded-lg animate-in fade-in border border-indigo-100">
+                <CalendarClock size={16} className="mr-2" /> {jumpHint}
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={isSubmitting || !time}
@@ -502,59 +668,51 @@ const AppointmentPage: React.FC<AppointmentPageProps> = ({ user }) => {
           <h3 className="font-bold text-slate-800 mb-4 flex items-center text-lg">
             <CalendarClock size={20} className="mr-2 text-indigo-600" /> 我的预约记录
           </h3>
+
+          <div className="mb-4 overflow-x-auto pb-1 custom-scrollbar">
+            <div className="inline-flex min-w-full gap-2">
+              {appointmentRecordTabs.map((tab) => {
+                const isActive = tab.key === activeRecordTab;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setActiveRecordTab(tab.key)}
+                    className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'bg-white text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    {tab.label}
+                    <span className={`ml-1.5 text-xs ${isActive ? 'text-white/80' : 'text-slate-400'}`}>{tab.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           
           {loadingHistory ? (
             <div className="flex justify-center py-12"><Loader2 className="animate-spin text-indigo-400 w-8 h-8" /></div>
           ) : appointments.length === 0 ? (
             <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200"><p>暂无预约记录</p></div>
           ) : (
-            <div className="space-y-3">
-              {appointments.map((apt) => {
-                const isFuture = new Date(apt.appointment_time) > new Date();
-                const canCancel = (apt.status === 'pending' || apt.status === 'confirmed') && isFuture;
-                const isCompleted = apt.status === 'completed';
-                const hasReviewed = reviewedAppointmentIds.has(apt.id);
+            <section className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <h4 className="text-sm font-bold text-slate-700">{activeTabMeta.title}</h4>
+                <span className="text-xs text-slate-400">{activeAppointmentsForTab.length} 条</span>
+              </div>
 
-                return (
-                    <div key={apt.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                        <div className="flex justify-between items-start">
-                            <div className="flex flex-col">
-                                <h4 className="font-bold text-slate-800 text-sm mb-1">{apt.service_name}</h4>
-                                <div className="flex items-center text-xs text-gray-500">
-                                    <Calendar size={12} className="mr-1" />
-                                    {new Date(apt.appointment_time).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })}
-                                    <Clock size={12} className="ml-2 mr-1" />
-                                    {new Date(apt.appointment_time).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                            </div>
-                            <div className="flex flex-col items-end">{getStatusBadge(apt.status)}</div>
-                        </div>
-                        
-                        {/* Actions: Cancel OR Review */}
-                        <div className="mt-3 pt-3 border-t border-gray-50 flex justify-end">
-                             {canCancel && (
-                                <button onClick={() => setAppointmentToCancel(apt)} className="flex items-center px-3 py-1.5 text-xs font-medium border border-red-200 text-red-500 rounded-full hover:bg-red-50 hover:border-red-300 transition-all active:scale-95">取消预约</button>
-                             )}
-
-                             {isCompleted && (
-                                hasReviewed ? (
-                                    <span className="flex items-center px-3 py-1.5 text-xs font-medium bg-gray-50 text-gray-400 rounded-full cursor-default">
-                                        <CheckCircle size={12} className="mr-1"/> 已评价
-                                    </span>
-                                ) : (
-                                    <button 
-                                        onClick={() => openReviewModal(apt)}
-                                        className="flex items-center px-3 py-1.5 text-xs font-medium border border-indigo-200 text-indigo-600 rounded-full hover:bg-indigo-50 hover:border-indigo-300 transition-all active:scale-95"
-                                    >
-                                        <MessageSquare size={12} className="mr-1"/> 去评价
-                                    </button>
-                                )
-                             )}
-                        </div>
-                    </div>
-                );
-              })}
-            </div>
+              {activeAppointmentsForTab.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                  <p>{activeTabMeta.empty}</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {activeAppointmentsForTab.map(renderAppointmentCard)}
+                </div>
+              )}
+            </section>
           )}
         </div>
       </div>

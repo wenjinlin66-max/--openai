@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, CreditCard, MessageSquare, FileText, CalendarClock } from 'lucide-react';
+import { Home, CreditCard, UserRound, FileText, CalendarClock } from 'lucide-react';
 import { TabType } from '../types';
 
 interface BottomNavProps {
@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { id: 'recharge', label: '充值', icon: CreditCard },
   { id: 'appointment', label: '预约', icon: CalendarClock },
   { id: 'history', label: '账单', icon: FileText },
-  { id: 'feedback', label: '评价', icon: MessageSquare },
+  { id: 'profile', label: '我的', icon: UserRound },
 ] as const;
 
 const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {

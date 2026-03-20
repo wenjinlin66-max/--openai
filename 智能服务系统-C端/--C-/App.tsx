@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Bell, X, Megaphone } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
-import { Customer, CustomerTier, TabType, Campaign } from './types';
+import { Customer, CustomerTier, CustomerSettings, TabType, Campaign } from './types';
 import { Session } from '@supabase/supabase-js';
 
 // Components
@@ -14,10 +14,20 @@ import NotificationsPage from './pages/Notifications';
 import AppointmentPage from './pages/Appointment';
 import ChatPage from './pages/Chat';
 import LoginPage from './pages/Login';
+import MyPage from './pages/My';
 
 export default function App() {
+  const defaultCustomerSettings: CustomerSettings = {
+    personalizedProfile: true,
+    loginProtection: true,
+    appointmentReminders: true,
+    campaignReminders: true,
+    afterSalesReminders: true,
+  };
+
   const [session, setSession] = useState<Session | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('home');
+  const [chatReturnTab, setChatReturnTab] = useState<TabType>('home');
   const [user, setUser] = useState<Customer | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
@@ -30,6 +40,13 @@ export default function App() {
   const [hasCheckedAnnouncement, setHasCheckedAnnouncement] = useState(false);
 
   const triggerRefresh = useCallback(() => setRefreshTrigger(prev => prev + 1), []);
+
+  const navigateToTab = useCallback((tab: TabType) => {
+    if (tab === 'chat') {
+      setChatReturnTab(activeTab);
+    }
+    setActiveTab(tab);
+  }, [activeTab]);
 
   // 1. Handle Session Initialization
   useEffect(() => {
@@ -74,6 +91,10 @@ export default function App() {
           balance: walletRes.data?.balance ?? 0,
           points: walletRes.data?.points ?? 0,
           total_spent: customerRes.data.total_spent ?? 0,
+          nickname: customerRes.data.nickname ?? '',
+          phone: customerRes.data.phone ?? '',
+          preferences: customerRes.data.preferences ?? [],
+          settings: { ...defaultCustomerSettings, ...(customerRes.data.settings || {}) },
         });
       } else {
         // New user logged in but not in 'customers' table yet.
@@ -86,9 +107,12 @@ export default function App() {
         const { error: insertCustError } = await supabase.from('customers').insert({
           id: userId,
           name: newName,
+          nickname: newName,
           tier: CustomerTier.BRONZE,
           total_spent: 0,
           avatar_url: '',
+          preferences: [],
+          settings: defaultCustomerSettings,
           created_at: new Date().toISOString()
         });
 
@@ -117,6 +141,10 @@ export default function App() {
             points: 0,
             total_spent: 0,
             avatar_url: '',
+            nickname: newName,
+            phone: '',
+            preferences: [],
+            settings: defaultCustomerSettings,
         });
       }
 
@@ -291,14 +319,15 @@ export default function App() {
   const renderContent = () => {
     if (!user) return null;
     switch (activeTab) {
-      case 'home': return <HomePage user={user} onNavigate={setActiveTab} unreadCount={unreadCount} onLogout={handleLogout} />;
+      case 'home': return <HomePage user={user} onNavigate={navigateToTab} unreadCount={unreadCount} onLogout={handleLogout} />;
       case 'recharge': return <RechargePage user={user} onRechargeSuccess={triggerRefresh} />;
       case 'history': return <HistoryPage user={user} />;
       case 'notifications': return <NotificationsPage user={user} onMarkRead={() => setUnreadCount(prev => Math.max(0, prev - 1))} />;
       case 'feedback': return <FeedbackPage user={user} />;
       case 'appointment': return <AppointmentPage user={user} />;
-      case 'chat': return <ChatPage user={user} onBack={() => setActiveTab('home')} />;
-      default: return <HomePage user={user} onNavigate={setActiveTab} unreadCount={unreadCount} onLogout={handleLogout} />;
+      case 'chat': return <ChatPage user={user} onBack={() => setActiveTab(chatReturnTab)} />;
+      case 'profile': return <MyPage user={user} onNavigate={navigateToTab} onLogout={handleLogout} unreadCount={unreadCount} onProfileUpdated={fetchUserData} />;
+      default: return <HomePage user={user} onNavigate={navigateToTab} unreadCount={unreadCount} onLogout={handleLogout} />;
     }
   };
 
@@ -330,7 +359,7 @@ export default function App() {
       </main>
 
       {activeTab !== 'chat' && (
-        <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+        <BottomNav activeTab={activeTab} setActiveTab={navigateToTab} />
       )}
 
       {/* Global Announcement Modal - Lifted to Root */}

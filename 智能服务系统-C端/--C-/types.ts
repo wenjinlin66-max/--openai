@@ -5,6 +5,14 @@ export enum CustomerTier {
   PLATINUM = '铂金会员',
 }
 
+export interface CustomerSettings {
+  personalizedProfile: boolean;
+  loginProtection: boolean;
+  appointmentReminders: boolean;
+  campaignReminders: boolean;
+  afterSalesReminders: boolean;
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -13,6 +21,10 @@ export interface Customer {
   points: number;
   total_spent: number;
   avatar_url?: string;
+  nickname?: string;
+  phone?: string;
+  preferences?: string[];
+  settings?: CustomerSettings;
 }
 
 export interface RechargePackage {
@@ -24,6 +36,18 @@ export interface RechargePackage {
   isPopular?: boolean;
 }
 
+export interface ServiceCatalogItem {
+  id: string;
+  name: string;
+  price: number;
+  durationMinutes?: number;
+  description?: string;
+  suitableFor?: string;
+  category?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
 export interface Feedback {
   id?: string;
   customer_id: string;
@@ -33,6 +57,12 @@ export interface Feedback {
   created_at?: string;
   appointment_id?: string;
   rating?: number;
+  service_name?: string;
+  request_type?: '投诉' | '申诉' | '售后咨询';
+  request_status?: 'pending' | 'processing' | 'resolved' | 'rejected';
+  handling_note?: string;
+  handled_at?: string;
+  handled_by?: string;
 }
 
 export interface Transaction {
@@ -84,4 +114,4 @@ export interface Campaign {
   clicks?: number;
 }
 
-export type TabType = 'home' | 'recharge' | 'feedback' | 'history' | 'notifications' | 'appointment' | 'chat';
+export type TabType = 'home' | 'recharge' | 'feedback' | 'history' | 'notifications' | 'appointment' | 'chat' | 'profile';

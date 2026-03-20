@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { supabase, isSupabaseConfigured, getSession } from '../lib/supabaseClient';
 import { 
   Customer, 
   VisitorLog, 
@@ -10,8 +10,37 @@ import {
   CustomerTier, 
   Campaign, 
   NotificationItem, 
-  SlotConfig 
+  SlotConfig,
+  ServiceCatalogItem 
 } from '../types';
+
+const parseFeedbackType = (
+  text: string | null | undefined,
+  requestType?: string | null
+): 'review' | 'complaint' | 'appeal' | 'after_sales' => {
+  if (requestType === '投诉') return 'complaint';
+  if (requestType === '申诉') return 'appeal';
+  if (requestType === '售后咨询') return 'after_sales';
+  const content = text?.trim() || '';
+  if (content.startsWith('【投诉】')) return 'complaint';
+  if (content.startsWith('【申诉】')) return 'appeal';
+  if (content.startsWith('【售后咨询】')) return 'after_sales';
+  return 'review';
+};
+
+const mapRequestStatusToLabel = (status?: string | null) => {
+  switch (status) {
+    case 'processing':
+      return '处理中';
+    case 'resolved':
+      return '已回访';
+    case 'rejected':
+      return '已驳回';
+    case 'pending':
+    default:
+      return '待受理';
+  }
+};
 
 // ==========================================
 // 1. 仪表盘与统计 (Dashboard Stats)
@@ -122,7 +151,9 @@ export const fetchCustomers = async (
       return {
         id: row.id,
         name: row.name,
+        nickname: row.nickname || '',
         avatarUrl: row.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}`,
+        phone: row.phone || '',
         tier: row.tier,
         tags: row.tags || [],
         visitCount: row.visit_count || 0,
@@ -155,20 +186,41 @@ export const fetchCustomers = async (
 export const createCustomer = async (customer: Partial<Customer>): Promise<Customer | null> => {
   if (!isSupabaseConfigured()) return null;
   
-  const { data, error } = await supabase
-    .from('customers')
-    .insert({
-      name: customer.name,
-      tier: customer.tier,
-      tags: customer.tags,
-      notes: customer.notes,
-      avatar_url: customer.avatarUrl,
-      visit_count: 1,
-      total_spent: 0,
-      last_visit: new Date().toISOString()
-    })
-    .select()
-    .single();
+  const payload = {
+    name: customer.name,
+    nickname: customer.nickname || customer.name,
+    tier: customer.tier,
+    tags: customer.tags,
+    notes: customer.notes,
+    avatar_url: customer.avatarUrl,
+    phone: customer.phone || null,
+    visit_count: 1,
+    total_spent: 0,
+    last_visit: new Date().toISOString()
+  };
+
+  let data: any = null;
+  let error: any = null;
+
+  ({ data, error } = await supabase.from('customers').insert(payload).select().single());
+
+  if (error && String(error.message || '').includes('phone')) {
+    ({ data, error } = await supabase
+      .from('customers')
+      .insert({
+        name: customer.name,
+        nickname: customer.nickname || customer.name,
+        tier: customer.tier,
+        tags: customer.tags,
+        notes: customer.notes,
+        avatar_url: customer.avatarUrl,
+        visit_count: 1,
+        total_spent: 0,
+        last_visit: new Date().toISOString()
+      })
+      .select()
+      .single());
+  }
 
   if (error) {
     console.error("Create customer error:", error);
@@ -191,16 +243,32 @@ export const createCustomer = async (customer: Partial<Customer>): Promise<Custo
 export const updateCustomer = async (id: string, updates: Partial<Customer>): Promise<boolean> => {
   if (!isSupabaseConfigured()) return false;
   
-  const { error } = await supabase
+  let { error } = await supabase
     .from('customers')
     .update({
       name: updates.name,
+      nickname: updates.nickname,
       tier: updates.tier,
       tags: updates.tags,
       notes: updates.notes,
-      preferences: updates.preferences
+      preferences: updates.preferences,
+      phone: updates.phone
     })
     .eq('id', id);
+
+  if (error && String(error.message || '').includes('phone')) {
+    ({ error } = await supabase
+      .from('customers')
+      .update({
+        name: updates.name,
+        nickname: updates.nickname,
+        tier: updates.tier,
+        tags: updates.tags,
+        notes: updates.notes,
+        preferences: updates.preferences
+      })
+      .eq('id', id));
+  }
 
   if (error) console.error("Update customer error:", error);
   return !error;
@@ -300,15 +368,53 @@ export const fetchFeedbacks = async (): Promise<FeedbackItem[]> => {
     .select('*')
     .order('created_at', { ascending: false });
 
-  return (data || []).map(f => ({
-    id: f.id,
-    customerName: f.customer_name || '匿名',
-    date: f.created_at.split('T')[0],
-    text: f.text,
-    sentiment: f.sentiment,
-    aiSummary: f.ai_summary,
-    rating: f.rating
-  }));
+  return (data || []).map(f => {
+    const feedbackType = parseFeedbackType(f.text, f.request_type);
+    return {
+      feedbackType,
+      id: f.id,
+      customerName: f.customer_name || '匿名',
+      date: f.created_at.split('T')[0],
+      text: f.text,
+      sentiment: f.sentiment,
+      aiSummary: f.ai_summary,
+      rating: f.rating,
+      serviceName: f.service_name,
+      requestStatus: f.request_status || undefined,
+      handlingNote: f.handling_note || undefined,
+      handledAt: f.handled_at || undefined,
+      handledBy: f.handled_by || undefined,
+      statusLabel: feedbackType === 'review' ? undefined : mapRequestStatusToLabel(f.request_status),
+    };
+  });
+};
+
+export const updateFeedbackHandling = async (
+  feedbackId: string,
+  requestStatus: 'pending' | 'processing' | 'resolved' | 'rejected',
+  handlingNote: string
+): Promise<boolean> => {
+  if (!isSupabaseConfigured()) return false;
+
+  const { session } = await getSession();
+  const handledAt = requestStatus === 'resolved' || requestStatus === 'rejected' ? new Date().toISOString() : null;
+
+  const { error } = await supabase
+    .from('feedbacks')
+    .update({
+      request_status: requestStatus,
+      handling_note: handlingNote.trim() || null,
+      handled_at: handledAt,
+      handled_by: session?.user?.id || null,
+    })
+    .eq('id', feedbackId);
+
+  if (error) {
+    console.error('Update feedback handling error:', error);
+    return false;
+  }
+
+  return true;
 };
 
 export const fetchNotifications = async (): Promise<NotificationItem[]> => {
@@ -348,6 +454,98 @@ export const deleteAllNotifications = async (ids: string[]) => {
   if (!isSupabaseConfigured()) return false;
   const { error } = await supabase.from('notifications').delete().in('id', ids);
   return !error;
+};
+
+// ==========================================
+// 5. 服务目录 (Service Catalog)
+// ==========================================
+
+const mapServiceRow = (row: any): ServiceCatalogItem => ({
+  id: row.id,
+  name: row.name,
+  price: row.price,
+  durationMinutes: row.duration_minutes || 0,
+  description: row.description || '',
+  suitableFor: row.suitable_for || '',
+  category: row.category || '基础服务',
+  isActive: row.is_active ?? true,
+  sortOrder: row.sort_order ?? 0,
+});
+
+export const fetchServiceCatalog = async (): Promise<ServiceCatalogItem[]> => {
+  if (!isSupabaseConfigured()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('services_catalog')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return (data || []).map(mapServiceRow);
+  } catch (e) {
+    console.error('Fetch service catalog error:', e);
+    return [];
+  }
+};
+
+export const createServiceCatalogItem = async (item: Omit<ServiceCatalogItem, 'id'>): Promise<ServiceCatalogItem | null> => {
+  if (!isSupabaseConfigured()) return null;
+  const { data, error } = await supabase
+    .from('services_catalog')
+    .insert({
+      name: item.name,
+      price: item.price,
+      duration_minutes: item.durationMinutes || null,
+      description: item.description || null,
+      suitable_for: item.suitableFor || null,
+      category: item.category || '基础服务',
+      is_active: item.isActive ?? true,
+      sort_order: item.sortOrder ?? 0,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Create service catalog item error:', error);
+    return null;
+  }
+
+  return mapServiceRow(data);
+};
+
+export const updateServiceCatalogItem = async (id: string, item: Partial<ServiceCatalogItem>): Promise<boolean> => {
+  if (!isSupabaseConfigured()) return false;
+  const { error } = await supabase
+    .from('services_catalog')
+    .update({
+      name: item.name,
+      price: item.price,
+      duration_minutes: item.durationMinutes,
+      description: item.description,
+      suitable_for: item.suitableFor,
+      category: item.category,
+      is_active: item.isActive,
+      sort_order: item.sortOrder,
+    })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Update service catalog item error:', error);
+    return false;
+  }
+
+  return true;
+};
+
+export const deleteServiceCatalogItem = async (id: string): Promise<boolean> => {
+  if (!isSupabaseConfigured()) return false;
+  const { error } = await supabase.from('services_catalog').delete().eq('id', id);
+  if (error) {
+    console.error('Delete service catalog item error:', error);
+    return false;
+  }
+  return true;
 };
 
 // ==========================================

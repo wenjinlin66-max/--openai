@@ -18,6 +18,8 @@ export interface Customer {
   id: string;
   name: string;
   avatarUrl: string;
+  nickname?: string;
+  phone?: string;
   tier: CustomerTier;
   tags: string[];
   visitCount: number;
@@ -64,6 +66,12 @@ export interface FeedbackItem {
   aiSummary: string;
   rating?: number;      // 新增：评分星级 (1-5)
   serviceName?: string; // 新增：关联的服务名称
+  feedbackType?: 'review' | 'complaint' | 'appeal' | 'after_sales';
+  statusLabel?: string;
+  requestStatus?: 'pending' | 'processing' | 'resolved' | 'rejected';
+  handlingNote?: string;
+  handledAt?: string;
+  handledBy?: string;
 }
 
 export interface NotificationItem {
@@ -112,4 +120,16 @@ export interface Campaign {
   clicks: number;           // 新增：点击量
 }
 
-export type ViewState = 'dashboard' | 'scanner' | 'customers' | 'assistant' | 'feedback' | 'appointments' | 'chat' | 'marketing';
+export interface ServiceCatalogItem {
+  id: string;
+  name: string;
+  price: number;
+  durationMinutes?: number;
+  description?: string;
+  suitableFor?: string;
+  category?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
+export type ViewState = 'dashboard' | 'scanner' | 'customers' | 'assistant' | 'feedback' | 'appointments' | 'chat' | 'marketing' | 'services';

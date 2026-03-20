@@ -1,13 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, MoreHorizontal, ChevronDown, Pencil, Save, Trash2, X, CreditCard, Wallet, Clock, DollarSign, ChevronLeft, ChevronRight, Diamond, Sparkles, Send } from 'lucide-react';
-import { Customer, CustomerTier } from '../types';
-import { SERVICES_CATALOG } from '../constants';
+import { Search, MoreHorizontal, Pencil, Save, Trash2, X, CreditCard, Wallet, Clock, DollarSign, ChevronLeft, ChevronRight, Diamond, Sparkles, Send, Phone, Tags } from 'lucide-react';
+import { Customer, CustomerTier, ServiceCatalogItem } from '../types';
 import { generateMarketingMessage } from '../services/geminiService';
-import { sendAdminMessage } from '../services/dataService';
+import { fetchServiceCatalog, sendAdminMessage } from '../services/dataService';
 
 interface CustomerListProps {
-  searchQuery: string;
   customers: Customer[];
   onUpdateCustomer: (id: string, updates: Partial<Customer>) => void;
   onDeleteCustomer: (id: string) => void;
@@ -39,6 +37,7 @@ const CustomerList: React.FC<CustomerListProps> = ({
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [txnForm, setTxnForm] = useState({ service: '', amount: 0 });
   const [rechargeAmount, setRechargeAmount] = useState(100);
+  const [serviceCatalog, setServiceCatalog] = useState<ServiceCatalogItem[]>([]);
 
   // Delete Confirmation Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -58,6 +57,14 @@ const CustomerList: React.FC<CustomerListProps> = ({
       }
     }
   }, [customers, selectedCustomer]);
+
+  useEffect(() => {
+    const loadServiceCatalog = async () => {
+      const data = await fetchServiceCatalog();
+      if (data.length > 0) setServiceCatalog(data);
+    };
+    loadServiceCatalog();
+  }, []);
 
   const getTierColor = (tier: CustomerTier) => {
     switch (tier) {
@@ -278,6 +285,16 @@ const CustomerList: React.FC<CustomerListProps> = ({
                      />
                    </div>
                    <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">昵称</label>
+                     <input 
+                       type="text" 
+                       value={editForm.nickname || ''}
+                       onChange={e => setEditForm({...editForm, nickname: e.target.value})}
+                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm text-slate-900"
+                       placeholder="未设置昵称时默认使用姓名"
+                     />
+                   </div>
+                   <div>
                      <label className="block text-xs font-bold text-slate-500 mb-1">等级</label>
                      <select 
                        value={editForm.tier}
@@ -287,13 +304,36 @@ const CustomerList: React.FC<CustomerListProps> = ({
                         {Object.values(CustomerTier).map(tier => (
                           <option key={tier} value={tier}>{tier}</option>
                         ))}
-                     </select>
+                      </select>
                    </div>
-                </div>
-              ) : (
-                <>
-                  <h2 className="text-xl font-bold text-slate-900">{selectedCustomer.name}</h2>
-                  <div className="flex gap-2 mt-2">
+                   <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">手机号</label>
+                     <input 
+                       type="text" 
+                       value={editForm.phone || ''}
+                       onChange={e => setEditForm({...editForm, phone: e.target.value})}
+                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm text-slate-900"
+                       placeholder="未设置手机号"
+                     />
+                   </div>
+                   <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">偏好服务（逗号分隔）</label>
+                     <input 
+                       type="text" 
+                       value={(editForm.preferences || []).join(', ')}
+                       onChange={e => setEditForm({...editForm, preferences: e.target.value.split(',').map(item => item.trim()).filter(Boolean)})}
+                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm text-slate-900"
+                       placeholder="例如：资深设计总监剪裁, 奢华鱼子酱头皮护理"
+                     />
+                   </div>
+                 </div>
+               ) : (
+                 <>
+                   <h2 className="text-xl font-bold text-slate-900">{selectedCustomer.name}</h2>
+                   {selectedCustomer.nickname && selectedCustomer.nickname !== selectedCustomer.name && (
+                     <p className="mt-1 text-sm text-slate-500">昵称：{selectedCustomer.nickname}</p>
+                   )}
+                   <div className="flex gap-2 mt-2">
                     <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getTierColor(selectedCustomer.tier)}`}>
                       {selectedCustomer.tier}
                     </span>
@@ -316,13 +356,30 @@ const CustomerList: React.FC<CustomerListProps> = ({
                 <div className="text-slate-400 text-xs mb-1 flex items-center justify-center gap-1"><Clock className="w-3 h-3" /> 到店</div>
                 <div className="font-bold text-slate-800">{selectedCustomer.visitCount}</div>
               </div>
-              <div className="bg-slate-50 p-3 rounded-xl text-center">
-                <div className="text-slate-400 text-xs mb-1 flex items-center justify-center gap-1"><DollarSign className="w-3 h-3" /> 总消费</div>
-                <div className="font-bold text-slate-800">${selectedCustomer.totalSpent}</div>
-              </div>
-            </div>
+               <div className="bg-slate-50 p-3 rounded-xl text-center">
+                 <div className="text-slate-400 text-xs mb-1 flex items-center justify-center gap-1"><DollarSign className="w-3 h-3" /> 总消费</div>
+                 <div className="font-bold text-slate-800">${selectedCustomer.totalSpent}</div>
+               </div>
+             </div>
 
-            <div className="space-y-6">
+             <div className="grid grid-cols-1 gap-3 mb-6">
+               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                 <div className="text-slate-400 text-xs mb-1 flex items-center gap-1"><Phone className="w-3 h-3" /> 手机号</div>
+                  <div className="font-medium text-slate-800 text-sm">{selectedCustomer.phone || '未填写手机号'}</div>
+               </div>
+               <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                 <div className="text-slate-400 text-xs mb-2 flex items-center gap-1"><Tags className="w-3 h-3" /> 偏好服务</div>
+                 <div className="flex flex-wrap gap-2">
+                   {selectedCustomer.preferences.length > 0 ? selectedCustomer.preferences.map((preference) => (
+                     <span key={preference} className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-600 border border-indigo-100">
+                       {preference}
+                     </span>
+                   )) : <span className="text-sm text-slate-400">暂无偏好服务</span>}
+                 </div>
+               </div>
+             </div>
+
+             <div className="space-y-6">
               {!isEditing && (
                 <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-100">
                   <h4 className="text-sm font-bold text-indigo-900 mb-3 flex items-center gap-2">
@@ -408,11 +465,11 @@ const CustomerList: React.FC<CustomerListProps> = ({
              <form onSubmit={handleTxnSubmit} className="flex-1 flex flex-col overflow-hidden">
                 <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-white">
                    <p className="text-xs text-slate-400 mb-2">点击下方服务快速填入：</p>
-                   {SERVICES_CATALOG.map((s, idx) => (
-                     <div key={idx} onClick={() => handleServiceSelect(s)} className={`p-3 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${txnForm.service === s.name ? 'border-emerald-500 bg-emerald-50 shadow-sm ring-1 ring-emerald-500' : 'border-slate-200 hover:border-emerald-200 hover:bg-slate-50'}`}>
-                        <span className={`font-medium ${txnForm.service === s.name ? 'text-emerald-800' : 'text-slate-700'}`}>{s.name}</span>
-                        <span className={`font-bold ${txnForm.service === s.name ? 'text-emerald-600' : 'text-slate-500'}`}>${s.price}</span>
-                     </div>
+                    {serviceCatalog.map((s) => (
+                      <div key={s.id} onClick={() => handleServiceSelect({ name: s.name, price: s.price })} className={`p-3 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${txnForm.service === s.name ? 'border-emerald-500 bg-emerald-50 shadow-sm ring-1 ring-emerald-500' : 'border-slate-200 hover:border-emerald-200 hover:bg-slate-50'}`}>
+                         <span className={`font-medium ${txnForm.service === s.name ? 'text-emerald-800' : 'text-slate-700'}`}>{s.name}</span>
+                         <span className={`font-bold ${txnForm.service === s.name ? 'text-emerald-600' : 'text-slate-500'}`}>${s.price}</span>
+                      </div>
                    ))}
                    <div onClick={() => handleServiceSelect({ name: "自定义服务", price: 0 })} className={`p-3 rounded-xl border cursor-pointer transition-all flex justify-center items-center text-slate-500 hover:bg-slate-50 border-dashed border-slate-300`}>
                       + 其他 / 自定义

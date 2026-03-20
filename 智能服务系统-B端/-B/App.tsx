@@ -7,7 +7,6 @@ import {
   Users, 
   Settings,
   Search,
-  Sparkles,
   LogOut,
   Database,
   Loader2,
@@ -20,7 +19,8 @@ import {
   CheckCircle,
   XCircle,
   Info,
-  Building2
+  Building2,
+  Scissors
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import CustomerScanner from './components/CustomerScanner';
@@ -32,6 +32,7 @@ import ChatCenter from './components/ChatCenter';
 import MarketingManager from './components/MarketingManager';
 import LoginScreen from './components/LoginScreen';
 import NotificationCenter from './components/NotificationCenter';
+import ServiceCatalogManager from './components/ServiceCatalogManager';
 import { ViewState, Customer, FeedbackItem, DashboardStats, NotificationItem } from './types';
 import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, fetchFeedbacks, addTransaction, rechargeCustomer, fetchDashboardStats, fetchNotifications, markNotificationRead, deleteNotification, deleteAllNotifications } from './services/dataService';
 import { isSupabaseConfigured, supabase, getSession, signOut } from './lib/supabaseClient';
@@ -379,7 +380,6 @@ const App: React.FC = () => {
       case 'customers':
         return (
           <CustomerList 
-            searchQuery={searchQuery} 
             customers={customers} 
             onUpdateCustomer={handleUpdateCustomer}
             onDeleteCustomer={handleDeleteCustomer}
@@ -397,6 +397,8 @@ const App: React.FC = () => {
         return <ChatCenter />;
       case 'marketing': 
         return <MarketingManager />;
+      case 'services':
+        return <ServiceCatalogManager showToast={showToast} />;
       case 'feedback':
         return <FeedbackView />;
       default:
@@ -430,6 +432,7 @@ const App: React.FC = () => {
       case 'appointments': return '预约管理';
       case 'chat': return '客服中心'; 
       case 'marketing': return '营销活动中心';
+      case 'services': return '服务管理';
       case 'feedback': return '反馈与评价';
       default: return 'CRIMS';
     }
@@ -497,6 +500,7 @@ const App: React.FC = () => {
             <NavItem view="scanner" icon={ScanFace} label="智能扫描" />
             <NavItem view="customers" icon={Users} label="客户管理" />
             <NavItem view="appointments" icon={Calendar} label="预约管理" />
+            <NavItem view="services" icon={Scissors} label="服务管理" />
             <NavItem view="marketing" icon={Zap} label="营销中心" />
             <NavItem view="chat" icon={Headphones} label="客服中心" />
             <NavItem view="assistant" icon={MessageSquareMore} label="AI 助手" />

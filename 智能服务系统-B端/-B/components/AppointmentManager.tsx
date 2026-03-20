@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Clock, Check, X, User, List, DollarSign, Loader2, Ban, Trash2, AlertTriangle, CheckCircle, Circle, CheckSquare, Settings, Edit2, Save } from 'lucide-react';
-import { fetchAppointments, updateAppointmentStatus, settleAppointment, deleteAppointment, bulkDeleteAppointments, fetchSlotConfigs, updateSlotCapacity } from '../services/dataService';
-import { Appointment } from '../types';
-import { SERVICES_CATALOG } from '../constants';
+import { Calendar, Clock, Check, X, User, List, DollarSign, Loader2, Trash2, AlertTriangle, CheckCircle, Circle, CheckSquare, Edit2 } from 'lucide-react';
+import { fetchAppointments, updateAppointmentStatus, settleAppointment, deleteAppointment, bulkDeleteAppointments, fetchSlotConfigs, updateSlotCapacity, fetchServiceCatalog } from '../services/dataService';
+import { Appointment, ServiceCatalogItem } from '../types';
 import { supabase } from '../lib/supabaseClient';
 
 const DEFAULT_CAPACITY = 2;
@@ -60,6 +59,7 @@ const AppointmentManager: React.FC<AppointmentManagerProps> = ({ showToast = (_m
   // Capacity Edit State
   const [editingSlot, setEditingSlot] = useState<{slot: string, capacity: number} | null>(null);
   const [isSavingCapacity, setIsSavingCapacity] = useState(false);
+  const [serviceCatalog, setServiceCatalog] = useState<ServiceCatalogItem[]>([]);
 
   const next7Days = useMemo(() => getNextSevenDays(), []);
 
@@ -74,6 +74,9 @@ const AppointmentManager: React.FC<AppointmentManagerProps> = ({ showToast = (_m
 
   useEffect(() => {
     loadData();
+    fetchServiceCatalog().then((data) => {
+      if (data.length > 0) setServiceCatalog(data);
+    });
     const apptChannel = supabase.channel('public:appointments')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
         fetchAppointments().then(setAppointments);
@@ -166,7 +169,7 @@ const AppointmentManager: React.FC<AppointmentManagerProps> = ({ showToast = (_m
   const handleOpenSettleModal = (e: React.MouseEvent, appt: Appointment) => {
     e.stopPropagation();
     setActiveAppt(appt);
-    const service = SERVICES_CATALOG.find(s => s.name === appt.serviceName);
+    const service = serviceCatalog.find(s => s.name === appt.serviceName);
     setSettleAmount(service ? service.price : 0);
     setShowSettleModal(true);
   };

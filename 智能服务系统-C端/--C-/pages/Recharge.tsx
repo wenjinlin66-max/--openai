@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   Sparkles,
@@ -14,7 +14,8 @@ import {
 } from 'lucide-react';
 import { PACKAGES } from '../constants';
 import { supabase } from '../lib/supabaseClient';
-import { Customer } from '../types';
+import { Customer, RechargePackage } from '../types';
+import { fetchActiveRechargePackages } from '../services/rechargePackages';
 
 interface RechargePageProps {
   user: Customer;
@@ -41,6 +42,7 @@ const packageScenes: Record<string, string[]> = {
 };
 
 const RechargePage: React.FC<RechargePageProps> = ({ user, onRechargeSuccess }) => {
+  const [packages, setPackages] = useState<RechargePackage[]>(PACKAGES);
   const [selectedPkgId, setSelectedPkgId] = useState<string>(PACKAGES[1].id);
   const [rechargeMode, setRechargeMode] = useState<'package' | 'custom'>('package');
   const [customAmount, setCustomAmount] = useState('');
@@ -48,14 +50,23 @@ const RechargePage: React.FC<RechargePageProps> = ({ user, onRechargeSuccess }) 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [successModal, setSuccessModal] = useState<null | { amount: number; value: number; points: number }>(null);
 
+  useEffect(() => {
+    fetchActiveRechargePackages().then((data) => {
+      if (data.length > 0) {
+        setPackages(data);
+        setSelectedPkgId((current) => (data.some((pkg) => pkg.id === current) ? current : data[0].id));
+      }
+    });
+  }, []);
+
   const handleCloseSuccessModal = () => {
     setSuccessModal(null);
     onRechargeSuccess();
   };
 
   const selectedPackage = useMemo(
-    () => PACKAGES.find((pkg) => pkg.id === selectedPkgId) ?? PACKAGES[0],
-    [selectedPkgId]
+    () => packages.find((pkg) => pkg.id === selectedPkgId) ?? packages[0] ?? PACKAGES[0],
+    [packages, selectedPkgId]
   );
 
   const parsedCustomAmount = Number(customAmount);
@@ -82,7 +93,7 @@ const RechargePage: React.FC<RechargePageProps> = ({ user, onRechargeSuccess }) 
       return;
     }
 
-    const pkg = PACKAGES.find((p) => p.id === selectedPkgId);
+    const pkg = packages.find((p) => p.id === selectedPkgId);
     const paymentAmount = rechargeMode === 'custom' ? rechargeAmount : (pkg?.price ?? 0);
     const valueAmount = rechargeMode === 'custom' ? rechargeAmount : (pkg?.value ?? 0);
 
@@ -189,7 +200,7 @@ const RechargePage: React.FC<RechargePageProps> = ({ user, onRechargeSuccess }) 
         </div>
       </div>
 
-      <div className="p-4 space-y-5 pb-44">
+        <div className="p-4 space-y-5 pb-64">
         <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-2 grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -261,7 +272,7 @@ const RechargePage: React.FC<RechargePageProps> = ({ user, onRechargeSuccess }) 
 
         {rechargeMode === 'package' && (
           <div className="grid grid-cols-1 gap-4">
-            {PACKAGES.map((pkg) => {
+            {packages.map((pkg) => {
             const isSelected = selectedPkgId === pkg.id;
             const bonusPoints = Math.floor(pkg.price);
 
@@ -293,7 +304,7 @@ const RechargePage: React.FC<RechargePageProps> = ({ user, onRechargeSuccess }) 
                       )}
                     </div>
 
-                    <p className="text-sm text-slate-500 leading-6">{packageDescriptions[pkg.id] || '适合会员储值消费与积分累计。'}</p>
+                    <p className="text-sm text-slate-500 leading-6">{pkg.description || packageDescriptions[pkg.id] || '适合会员储值消费与积分累计。'}</p>
 
                     <div className="mt-3 space-y-1.5">
                       {pkg.benefits.map((benefit, idx) => (
@@ -314,7 +325,7 @@ const RechargePage: React.FC<RechargePageProps> = ({ user, onRechargeSuccess }) 
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  {packageScenes[pkg.id]?.map((scene) => (
+                  {(pkg.scenes || packageScenes[pkg.id] || []).map((scene) => (
                     <div key={scene} className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-500 border border-slate-100">
                       {scene}
                     </div>
@@ -326,20 +337,22 @@ const RechargePage: React.FC<RechargePageProps> = ({ user, onRechargeSuccess }) 
           </div>
         )}
 
-        <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4">
-          <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-xs text-indigo-500 font-semibold mb-1">当前方案</p>
-              <p className="font-bold text-slate-900 truncate">{activeTitle}</p>
-              <p className="text-xs text-slate-500 mt-1 line-clamp-1">{activeBenefits[0]}</p>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-[11px] text-slate-500">支付 / 到账</p>
-              <p className="text-lg font-bold text-slate-900">¥{rechargeAmount.toLocaleString()}</p>
-              <p className="text-xs text-indigo-600 mt-0.5">+{Math.floor(rechargeAmount)} 积分</p>
+        {rechargeMode === 'custom' && (
+          <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4">
+            <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-xs text-indigo-500 font-semibold mb-1">当前方案</p>
+                <p className="font-bold text-slate-900 truncate">{activeTitle}</p>
+                <p className="text-xs text-slate-500 mt-1 line-clamp-1">{activeBenefits[0]}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-[11px] text-slate-500">支付 / 到账</p>
+                <p className="text-lg font-bold text-slate-900">¥{rechargeAmount.toLocaleString()}</p>
+                <p className="text-xs text-indigo-600 mt-0.5">+{Math.floor(rechargeAmount)} 积分</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4">
           <div className="flex items-start gap-2 text-xs text-slate-500">

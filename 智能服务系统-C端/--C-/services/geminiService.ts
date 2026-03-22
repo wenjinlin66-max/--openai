@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabaseClient';
 import { Customer, Campaign } from '../types';
 import { BOOKING_RULES, MEMBERSHIP_GUIDE, PACKAGES, STORE_PROFILE } from '../constants';
 import { fetchActiveServiceCatalog } from './serviceCatalog';
+import { fetchActiveRechargePackages } from './rechargePackages';
 
 export interface SentimentResult {
   sentiment: 'positive' | 'neutral' | 'negative';
@@ -23,6 +24,8 @@ const matchesAny = (text: string, keywords: string[]) => keywords.some((keyword)
 const getStructuredReply = async (userMessage: string, user: Customer) => {
   const text = userMessage.toLowerCase();
   const serviceCatalog = await fetchActiveServiceCatalog();
+  const rechargePackages = await fetchActiveRechargePackages();
+  const packageList = rechargePackages.length > 0 ? rechargePackages : PACKAGES;
 
   if (matchesAny(text, ['你能做什么', '你能回答什么', '你能帮我什么', '能问什么', '可以问什么'])) {
     return formatSectionReply('智能客服可咨询范围', [
@@ -47,7 +50,7 @@ const getStructuredReply = async (userMessage: string, user: Customer) => {
       `系统支持的会员等级包括：${MEMBERSHIP_GUIDE.tiers.join('、')}。`,
       MEMBERSHIP_GUIDE.rules[0],
       MEMBERSHIP_GUIDE.rules[1],
-      `充值套餐包括：${PACKAGES.map((pkg) => `${pkg.name}（${pkg.price}元）`).join('、')}。`,
+      `充值套餐包括：${packageList.map((pkg) => `${pkg.name}（${pkg.price}元）`).join('、')}。`,
       `套餐亮点：${MEMBERSHIP_GUIDE.packageHighlights.join('；')}`
     ]);
   }
@@ -259,7 +262,10 @@ const buildCustomerServiceContext = async (user: Customer) => {
     return `- ${service.name}：价格 ${service.price} 元，时长 ${durationText}，服务说明：${service.description || '详情可咨询门店顾问'}，适合人群：${service.suitableFor || '适用人群以门店建议为准'}`;
   }).join('\n');
 
-  const packageSummary = PACKAGES.map((pkg) => {
+  const rechargePackages = await fetchActiveRechargePackages();
+  const packageList = rechargePackages.length > 0 ? rechargePackages : PACKAGES;
+
+  const packageSummary = packageList.map((pkg) => {
     return `- ${pkg.name}：支付 ${pkg.price} 元，到账 ${pkg.value} 元，权益：${pkg.benefits.join('、')}`;
   }).join('\n');
 

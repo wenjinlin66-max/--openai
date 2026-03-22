@@ -34,6 +34,10 @@ export interface RechargePackage {
   value: number;
   benefits: string[];
   isPopular?: boolean;
+  description?: string;
+  scenes?: string[];
+  isActive?: boolean;
+  sortOrder?: number;
 }
 
 export interface ServiceCatalogItem {

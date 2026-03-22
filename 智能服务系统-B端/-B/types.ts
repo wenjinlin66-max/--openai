@@ -132,4 +132,17 @@ export interface ServiceCatalogItem {
   sortOrder?: number;
 }
 
+export interface RechargePackageItem {
+  id: string;
+  name: string;
+  price: number;
+  value: number;
+  benefits: string[];
+  description?: string;
+  scenes?: string[];
+  isPopular?: boolean;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
 export type ViewState = 'dashboard' | 'scanner' | 'customers' | 'assistant' | 'feedback' | 'appointments' | 'chat' | 'marketing' | 'services';

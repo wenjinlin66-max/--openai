@@ -11,7 +11,8 @@ import {
   Campaign, 
   NotificationItem, 
   SlotConfig,
-  ServiceCatalogItem 
+  ServiceCatalogItem,
+  RechargePackageItem 
 } from '../types';
 
 const parseFeedbackType = (
@@ -457,7 +458,100 @@ export const deleteAllNotifications = async (ids: string[]) => {
 };
 
 // ==========================================
-// 5. 服务目录 (Service Catalog)
+// 5. 充值套餐 (Recharge Packages)
+// ==========================================
+
+const mapRechargePackageRow = (row: any): RechargePackageItem => ({
+  id: row.id,
+  name: row.name,
+  price: Number(row.price),
+  value: Number(row.value),
+  benefits: row.benefits || [],
+  description: row.description || '',
+  scenes: row.scenes || [],
+  isPopular: row.is_popular ?? false,
+  isActive: row.is_active ?? true,
+  sortOrder: row.sort_order ?? 0,
+});
+
+export const fetchRechargePackages = async (): Promise<RechargePackageItem[]> => {
+  if (!isSupabaseConfigured()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('recharge_packages')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return (data || []).map(mapRechargePackageRow);
+  } catch (e) {
+    console.error('Fetch recharge packages error:', e);
+    return [];
+  }
+};
+
+export const createRechargePackage = async (item: Omit<RechargePackageItem, 'id'>): Promise<RechargePackageItem | null> => {
+  if (!isSupabaseConfigured()) return null;
+  const { data, error } = await supabase
+    .from('recharge_packages')
+    .insert({
+      name: item.name,
+      price: item.price,
+      value: item.value,
+      benefits: item.benefits,
+      description: item.description || null,
+      scenes: item.scenes || [],
+      is_popular: item.isPopular ?? false,
+      is_active: item.isActive ?? true,
+      sort_order: item.sortOrder ?? 100,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Create recharge package error:', error);
+    return null;
+  }
+  return mapRechargePackageRow(data);
+};
+
+export const updateRechargePackage = async (id: string, item: Partial<RechargePackageItem>): Promise<boolean> => {
+  if (!isSupabaseConfigured()) return false;
+  const { error } = await supabase
+    .from('recharge_packages')
+    .update({
+      name: item.name,
+      price: item.price,
+      value: item.value,
+      benefits: item.benefits,
+      description: item.description,
+      scenes: item.scenes,
+      is_popular: item.isPopular,
+      is_active: item.isActive,
+      sort_order: item.sortOrder,
+    })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Update recharge package error:', error);
+    return false;
+  }
+  return true;
+};
+
+export const deleteRechargePackage = async (id: string): Promise<boolean> => {
+  if (!isSupabaseConfigured()) return false;
+  const { error } = await supabase.from('recharge_packages').delete().eq('id', id);
+  if (error) {
+    console.error('Delete recharge package error:', error);
+    return false;
+  }
+  return true;
+};
+
+// ==========================================
+// 6. 服务目录 (Service Catalog)
 // ==========================================
 
 const mapServiceRow = (row: any): ServiceCatalogItem => ({
